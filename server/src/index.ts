@@ -48,8 +48,8 @@ app.post("/api/auth/signup", async (req, res) => {
     if (existing) return res.status(409).json({ error: "username taken" });
     const hash = await hashPassword(password);
     const profile = await createUser(username, hash, displayName);
-    const token = signToken({ id: profile.id, username: profile.username, displayName: profile.displayName ?? null, avatarUrl: profile.avatarUrl ?? null });
-    res.status(201).json({ token, user: profile });
+    const token = signToken({ id: profile.id, username: profile.username, displayName: profile.displayName ?? null, avatarUrl: profile.avatarUrl ?? null, platformRole: profile.platformRole });
+    res.status(201).json({ token, user: { ...profile, platformRole: profile.platformRole } });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -71,6 +71,14 @@ app.get("/api/me", requireAuth, async (req, res) => {
   const user = await findUserById(req2.userId);
   if (!user) return res.status(404).json({ error: "user not found" });
   res.json({ user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, createdAt: user.created_at } });
+});
+
+app.patch("/api/me/nick", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { displayName } = req.body || {};
+  if (!displayName || !displayName.trim()) return res.status(400).json({ error: "displayName required" });
+  await pools.core.query(`UPDATE public.users SET display_name = $2, updated_at = now() WHERE id = $1`, [req2.userId, displayName.trim()]);
+  res.json({ ok: true });
 });
 
 // ---------- ROOMS ----------

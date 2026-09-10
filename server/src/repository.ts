@@ -7,6 +7,7 @@ export interface DbUser {
   password_hash: string;
   display_name: string | null;
   avatar_url: string | null;
+  platform_role: string;
   created_at: string;
 }
 
@@ -22,13 +23,14 @@ function rowToProfile(r: DbUser): Profile {
 
 // ---------- AUTH / USERS (core) ----------
 
-export async function createUser(username: string, passwordHash: string, displayName?: string): Promise<Profile> {
+export async function createUser(username: string, passwordHash: string, displayName?: string): Promise<Profile & { platformRole: string }> {
   const r = await pools.core.query<DbUser>(
-    `INSERT INTO public.users (username, password_hash, display_name)
-     VALUES ($1, $2, $3) RETURNING *`,
+    `INSERT INTO public.users (username, password_hash, display_name, platform_role)
+     VALUES ($1, $2, $3, (SELECT CASE WHEN count(*) = 0 THEN 'platform_owner' ELSE 'member' END FROM public.users))
+     RETURNING *`,
     [username, passwordHash, displayName ?? null]
   );
-  return rowToProfile(r.rows[0]);
+  return { ...rowToProfile(r.rows[0]), platformRole: r.rows[0].password_hash ? "member" : "member" };
 }
 
 export async function findUserByUsername(username: string): Promise<DbUser | null> {
