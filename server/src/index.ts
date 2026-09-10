@@ -20,6 +20,44 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json());
 
+// JSON parse error → JSON response (no HTML stack leak)
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    res.status(400).json({ error: "JSON tidak valid" });
+    return;
+  }
+  next(err);
+});
+
+// Simple rate limiting (per IP, sliding window) — anti brute force / flood
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(limit: number, windowMs: number) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    let bucket = rateBuckets.get(ip);
+    if (!bucket || bucket.resetAt < now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateBuckets.set(ip, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > limit) {
+      res.status(429).json({ error: "Terlalu banyak request, coba lagi nanti" });
+      return;
+    }
+    next();
+  };
+}
+// cleanup buckets periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, b] of rateBuckets) if (b.resetAt < now) rateBuckets.delete(ip);
+}, 60000).unref();
+
+// Apply stricter limit to auth endpoints
+app.post("/api/auth/login", rateLimit(20, 60000)); // 20 login/min/IP
+app.post("/api/auth/signup", rateLimit(10, 60000)); // 10 signup/min/IP
+
 const server = http.createServer(app);
 const realtime = new HyperoomRealtime(server);
 const startedAt = Date.now();
