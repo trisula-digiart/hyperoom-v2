@@ -127,6 +127,17 @@ app.post("/api/rooms/:id/leave", requireAuth, async (req, res) => {
 });
 
 app.get("/api/rooms/:id/members", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const room = await findRoomById(req.params.id);
+  if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  // Auto-join public room on view (real membership row, persistent)
+  if (room.type === "public") {
+    const role = await getMemberRole(room.id, req2.userId);
+    if (!role) {
+      const member = await joinRoom(room.id, req2.userId);
+      realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member });
+    }
+  }
   const members = await listRoomMembers(req.params.id);
   res.json({ members });
 });
