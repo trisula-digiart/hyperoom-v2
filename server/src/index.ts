@@ -333,7 +333,7 @@ app.use(express.static(path.join(__dirname, "..", "public"), {
 }));
 app.get("/", (req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  res.sendFile(path.join(__dirname, "..", "public", "dashboard.html"));
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
 
 const port = config.port;

@@ -164,8 +164,10 @@ function feed(type, html) {
 }
 
 function setStatus(pillId, txt, isOk) {
-  $(pillId + 'Text').textContent = txt;
-  $(pillId).classList.toggle('off', !isOk);
+  const t = $(pillId + 'Text');
+  const p = $(pillId);
+  if (t) t.textContent = txt;
+  if (p) p.classList.toggle('off', !isOk);
 }
 
 function renderOverview(d) {
