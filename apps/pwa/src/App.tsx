@@ -29,9 +29,9 @@ function shortId(id: string) { return id.slice(0, 8); }
 // --- Boot loader (classic connection splash, modern polish) ---
 const BOOT_LINES = [
   "hyperoom v2",
-  "connecting to home server...",
-  "verifying session...",
-  "loading workspace...",
+  "nyambung ke server rumah...",
+  "cek sesi...",
+  "muat workspace...",
   "online.",
 ];
 
@@ -62,7 +62,7 @@ function BootLoader() {
         </div>
         <div className="boot-bar"><div className="boot-bar-fill" /></div>
       </div>
-      <div className="boot-note">home server · self-hosted · no cloud</div>
+      <div className="boot-note">server rumah · self-hosted · tanpa cloud</div>
     </div>
   );
 }
@@ -94,11 +94,11 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
     <div className="auth-bg">
       <div className="auth-card">
         <div className="auth-logo">Hyper<em>oom</em></div>
-        <div className="auth-sub">v2 — home server</div>
+        <div className="auth-sub">v2 — server rumah</div>
         <form onSubmit={submit} className="auth-form">
           {mode === "signup" && (
-            <label>Display Name
-              <input value={d} onChange={e => setD(e.target.value)} placeholder="optional" autoFocus />
+            <label>Nama Tampilan
+              <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" autoFocus />
             </label>
           )}
           <label>Username
@@ -109,13 +109,13 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
           </label>
           {err && <div className="auth-error">{err}</div>}
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? "…" : mode === "login" ? "Log In" : "Create Account"}
+            {loading ? "…" : mode === "login" ? "Masuk" : "Buat Akun"}
           </button>
         </form>
         <div className="auth-switch">
           {mode === "login"
-            ? <>No account? <button onClick={() => setMode("signup")}>Sign up</button></>
-            : <>Have an account? <button onClick={() => setMode("login")}>Log in</button></>
+            ? <>Belum punya akun? <button onClick={() => setMode("signup")}>Daftar</button></>
+            : <>Udah punya akun? <button onClick={() => setMode("login")}>Masuk</button></>
           }
         </div>
       </div>
@@ -219,13 +219,13 @@ export default function App() {
         setMessages(prev => [...prev, {
           id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
           kind: "system", content: [
-            "/join #room — join a room",
-            "/part #room — leave a room",
-            "/me action — send an action (/me waves)",
-            "/nick name — change your display name",
-            "/whois user — look up a user",
-            "/topic text — set room topic",
-            "/quit — disconnect",
+            "/join #ruangan — gabung ke ruangan",
+            "/part #ruangan — keluar dari ruangan",
+            "/me aksi — kirim aksi (/me lambai)",
+            "/nick nama — ganti nama tampilan",
+            "/whois user — intip profil user",
+            "/topic teks — set topik ruangan",
+            "/quit — putus koneksi",
           ].join(" │ "),
           createdAt: new Date().toISOString()
         }]);
@@ -251,7 +251,7 @@ export default function App() {
       // /help fallback
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
-        kind: "system", content: `Unknown command: ${cmd}. Type /help for available commands.`,
+        kind: "system", content: `Perintah ga dikenal: ${cmd}. Ketik /help buat liat daftar perintah.`,
         createdAt: new Date().toISOString()
       }]);
       return;
@@ -263,7 +263,7 @@ export default function App() {
     } catch (err) {
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
-        kind: "system", content: `Error: ${(err as Error).message}`,
+        kind: "system", content: `Gagal: ${(err as Error).message}`,
         createdAt: new Date().toISOString()
       }]);
     }
@@ -295,13 +295,13 @@ export default function App() {
 
         <div className="sidebar-section">
           <div className="sidebar-heading">
-            Channels
-            <button className="icon-btn" onClick={() => setShowCreateRoom(!showCreateRoom)} title="Create room">＋</button>
-          </div>
+          Saluran
+          <button className="icon-btn" onClick={() => setShowCreateRoom(!showCreateRoom)} title="Buat ruangan">＋</button>
+        </div>
           {showCreateRoom && (
             <form className="create-room" onSubmit={createRoom}>
-              <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="#new-room" autoFocus />
-              <button type="submit" className="btn-sm">Create</button>
+              <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="#ruangan-baru" autoFocus />
+              <button type="submit" className="btn-sm">Buat</button>
             </form>
           )}
           <div className="room-list">
@@ -312,7 +312,7 @@ export default function App() {
                 <span className="room-hash">#</span>{r.name.slice(1)}
               </div>
             ))}
-            {rooms.length === 0 && <div className="sidebar-empty">no rooms yet</div>}
+            {rooms.length === 0 && <div className="sidebar-empty">belum ada ruangan</div>}
           </div>
         </div>
 
@@ -323,7 +323,7 @@ export default function App() {
               <div className="user-name">{user.displayName || user.username}</div>
               <div className="user-id">@{user.username}</div>
             </div>
-            <button className="icon-btn logout" onClick={handleLogout} title="logout">⏻</button>
+            <button className="icon-btn logout" onClick={handleLogout} title="Keluar">⏻</button>
           </div>
         </div>
       </aside>
@@ -333,11 +333,11 @@ export default function App() {
         <div className="main-header">
           <div className="main-header-left">
             <span className="header-hash">#</span>
-            <span className="header-room">{activeRoom?.name?.slice(1) || "select a room"}</span>
+            <span className="header-room">{activeRoom?.name?.slice(1) || "pilih ruangan"}</span>
             {activeRoom?.topic && <span className="header-topic">{activeRoom.topic}</span>}
           </div>
           <div className="main-header-right">
-            <span className="member-count">{members.length} member{members.length !== 1 ? "s" : ""}</span>
+            <span className="member-count">{members.length} anggota{members.length !== 1 ? "" : ""}</span>
           </div>
         </div>
 
@@ -345,8 +345,8 @@ export default function App() {
           {messages.length === 0 && (
             <div className="messages-empty">
               <div className="empty-icon">💬</div>
-              <div>No messages yet</div>
-              <div className="empty-sub">Send the first message in #{activeRoom?.name?.slice(1) || "…"}</div>
+              <div>Belum ada pesan</div>
+              <div className="empty-sub">Kirim pesan pertama di #{activeRoom?.name?.slice(1) || "…"}</div>
             </div>
           )}
           {messages.map(msg => {
@@ -376,7 +376,7 @@ export default function App() {
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={activeRoom ? `Type a message or /help for commands…` : "Select a room first"}
+            placeholder={activeRoom ? `Ketik pesan atau /help buat liat perintah…` : "Pilih ruangan dulu"}
             disabled={!activeRoom}
             autoFocus
           />
@@ -386,14 +386,15 @@ export default function App() {
 
       {/* ---- RIGHT SIDEBAR ---- */}
       <aside className="sidebar-right">
-        <div className="sidebar-heading">Members ({members.length})</div>
+        <div className="sidebar-heading">Anggota ({members.length})</div>
         <div className="member-list">
           {(["owner", "admin", "operator", "voice", "member"] as const).map(role => {
             const group = members.filter(m => m.role === role);
             if (group.length === 0) return null;
+            const roleLabel: Record<string, string> = { owner: "Pemilik", admin: "Admin", operator: "Operator", voice: "Voice", member: "Anggota" };
             return (
               <div key={role} className="member-group">
-                <div className="member-group-label">{role}s ({group.length})</div>
+                <div className="member-group-label">{roleLabel[role]} ({group.length})</div>
                 {group.map(m => {
                   const pres = presenceMap.get(m.userId);
                   const isOnline = pres?.status === "online";
