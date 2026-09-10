@@ -7,6 +7,7 @@ export interface AuthUser {
   username: string;
   displayName: string | null;
   avatarUrl: string | null;
+  platformRole: string;
 }
 
 export function hashPassword(plain: string): Promise<string> {

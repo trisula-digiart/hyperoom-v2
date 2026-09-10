@@ -50,6 +50,7 @@ body { height: 100vh; overflow: hidden; }
 }
 .auth-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 .auth-error { background: #fef2f2; color: var(--error); padding: 8px 12px; border-radius: var(--radius); font-size: 13px; }
+.privacy-note { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: -6px; }
 .auth-switch { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-dim); }
 .auth-switch button { background: none; border: none; color: var(--accent); font-weight: 600; cursor: pointer; font-size: 13px; }
 .auth-loading { display: flex; justify-content: center; align-items: center; height: 100vh; }

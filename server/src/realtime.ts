@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import type { RealtimeEvent } from "@hyperoom/domain";
 import { verifyToken } from "./auth.js";
-import { setPresence } from "./repository.js";
+import { setPresence, touchUserSeen } from "./repository.js";
 
 interface SocketSession {
   userId: string;
@@ -48,6 +48,8 @@ export class HyperoomRealtime {
     void setPresence(payload.sub, "online").then((p) => {
       this.broadcast({ type: "presence:update", presence: p } satisfies RealtimeEvent);
     });
+    // touch last_seen in users (core)
+    void touchUserSeen(payload.sub);
 
     socket.on("message", (data) => this.onMessage(socket, data.toString()));
     socket.on("close", () => this.onClose(socket));

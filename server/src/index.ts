@@ -40,37 +40,43 @@ function requireAuth(req: express.Request, res: express.Response, next: express.
 
 // ---------- AUTH ----------
 app.post("/api/auth/signup", async (req, res) => {
-  const { username, password, displayName } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: "username and password required" });
-  if (password.length < 6) return res.status(400).json({ error: "password too short (min 6)" });
+  const { username, password, displayName, phone } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: "username dan password wajib" });
+  if (password.length < 6) return res.status(400).json({ error: "password minimal 6 karakter" });
+  if (username.length < 2) return res.status(400).json({ error: "nickname minimal 2 karakter" });
+  if (username.length > 20) return res.status(400).json({ error: "nickname maksimal 20 karakter" });
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ error: "nickname hanya huruf, angka, underscore" });
+  if (phone && !/^[0-9+\-\s]{8,16}$/.test(phone)) return res.status(400).json({ error: "nomor HP tidak valid" });
   try {
     const existing = await findUserByUsername(username);
-    if (existing) return res.status(409).json({ error: "username taken" });
+    if (existing) return res.status(409).json({ error: "nickname sudah dipakai" });
     const hash = await hashPassword(password);
-    const profile = await createUser(username, hash, displayName);
+    const profile = await createUser(username, hash, displayName, phone);
     const token = signToken({ id: profile.id, username: profile.username, displayName: profile.displayName ?? null, avatarUrl: profile.avatarUrl ?? null, platformRole: profile.platformRole });
-    res.status(201).json({ token, user: { ...profile, platformRole: profile.platformRole } });
+    res.status(201).json({ token, user: { id: profile.id, username: profile.username, displayName: profile.displayName ?? undefined, platformRole: profile.platformRole, createdAt: profile.createdAt } });
   } catch (err) {
+    if ((err as { code?: string }).code === "23505") return res.status(409).json({ error: "nickname atau nomor HP sudah dipakai" });
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: "username and password required" });
+  if (!username || !password) return res.status(400).json({ error: "username dan password wajib" });
   const user = await findUserByUsername(username);
-  if (!user) return res.status(401).json({ error: "invalid credentials" });
+  if (!user) return res.status(401).json({ error: "nickname atau password salah" });
   const ok = await verifyPassword(password, user.password_hash);
-  if (!ok) return res.status(401).json({ error: "invalid credentials" });
-  const token = signToken({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url });
-  res.json({ token, user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, createdAt: user.created_at } });
+  if (!ok) return res.status(401).json({ error: "nickname atau password salah" });
+  await pools.core.query(`UPDATE public.users SET last_seen_at = now() WHERE id = $1`, [user.id]);
+  const token = signToken({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url, platformRole: user.platform_role });
+  res.json({ token, user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, platformRole: user.platform_role, createdAt: user.created_at } });
 });
 
 app.get("/api/me", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const user = await findUserById(req2.userId);
-  if (!user) return res.status(404).json({ error: "user not found" });
-  res.json({ user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, createdAt: user.created_at } });
+  if (!user) return res.status(404).json({ error: "user tidak ditemukan" });
+  res.json({ user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, platformRole: user.platform_role, createdAt: user.created_at } });
 });
 
 app.patch("/api/me/nick", requireAuth, async (req, res) => {

@@ -22,9 +22,9 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   return json as T;
 }
 
-export async function signup(username: string, password: string, displayName?: string) {
+export async function signup(username: string, password: string, displayName?: string, phone?: string) {
   const r = await api<{ token: string; user: { id: string; username: string; displayName?: string } }>(
-    "POST", "/api/auth/signup", { username, password, displayName }
+    "POST", "/api/auth/signup", { username, password, displayName, phone }
   );
   token = r.token; localStorage.setItem("h2_token", r.token); user = r.user;
   return r.user;

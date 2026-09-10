@@ -8,6 +8,8 @@ export interface DbUser {
   display_name: string | null;
   avatar_url: string | null;
   platform_role: string;
+  phone: string | null;
+  last_seen_at: string | null;
   created_at: string;
 }
 
@@ -23,14 +25,14 @@ function rowToProfile(r: DbUser): Profile {
 
 // ---------- AUTH / USERS (core) ----------
 
-export async function createUser(username: string, passwordHash: string, displayName?: string): Promise<Profile & { platformRole: string }> {
+export async function createUser(username: string, passwordHash: string, displayName?: string, phone?: string): Promise<Profile & { platformRole: string }> {
   const r = await pools.core.query<DbUser>(
-    `INSERT INTO public.users (username, password_hash, display_name, platform_role)
-     VALUES ($1, $2, $3, (SELECT CASE WHEN count(*) = 0 THEN 'platform_owner' ELSE 'member' END FROM public.users))
+    `INSERT INTO public.users (username, password_hash, display_name, phone, platform_role)
+     VALUES ($1, $2, $3, $4, (SELECT CASE WHEN count(*) = 0 THEN 'platform_owner' ELSE 'member' END FROM public.users))
      RETURNING *`,
-    [username, passwordHash, displayName ?? null]
+    [username, passwordHash, displayName ?? null, phone ?? null]
   );
-  return { ...rowToProfile(r.rows[0]), platformRole: r.rows[0].password_hash ? "member" : "member" };
+  return { ...rowToProfile(r.rows[0]), platformRole: r.rows[0].platform_role };
 }
 
 export async function findUserByUsername(username: string): Promise<DbUser | null> {
@@ -44,6 +46,10 @@ export async function findUserByUsername(username: string): Promise<DbUser | nul
 export async function findUserById(id: string): Promise<DbUser | null> {
   const r = await pools.core.query<DbUser>(`SELECT * FROM public.users WHERE id = $1`, [id]);
   return r.rows[0] ?? null;
+}
+
+export async function touchUserSeen(userId: string): Promise<void> {
+  await pools.core.query(`UPDATE public.users SET last_seen_at = now() WHERE id = $1`, [userId]);
 }
 
 // ---------- ROOMS (core) ----------

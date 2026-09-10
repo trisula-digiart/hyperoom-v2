@@ -68,7 +68,7 @@ function BootLoader() {
 }
 function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [u, setU] = useState(""); const [p, setP] = useState(""); const [d, setD] = useState("");
+  const [u, setU] = useState(""); const [p, setP] = useState(""); const [d, setD] = useState(""); const [ph, setPh] = useState("");
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
@@ -85,7 +85,7 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(""); setLoading(true);
     try {
-      const user = mode === "signup" ? await signup(u, p, d || u) : await login(u, p);
+      const user = mode === "signup" ? await signup(u, p, d || u, ph || undefined) : await login(u, p);
       onAuthed(user);
     } catch (err) { setErr(String((err as Error).message)); setLoading(false); }
   };
@@ -97,9 +97,15 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
         <div className="auth-sub">v2 — server rumah</div>
         <form onSubmit={submit} className="auth-form">
           {mode === "signup" && (
-            <label>Nama Tampilan
-              <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" autoFocus />
-            </label>
+            <>
+              <label>Nama Tampilan
+                <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" />
+              </label>
+              <label>Nomor HP
+                <input value={ph} onChange={e => setPh(e.target.value)} placeholder="08xxxxxxxxxx (opsional)" inputMode="tel" />
+              </label>
+              <div className="privacy-note">🔒 Nomor HP cuma buat lo, ga bakal ditampilkan ke user lain</div>
+            </>
           )}
           <label>Username
             <input value={u} onChange={e => setU(e.target.value)} required autoFocus={mode === "login"} />
