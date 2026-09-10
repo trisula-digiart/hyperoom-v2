@@ -342,6 +342,24 @@ server.listen(port, config.host, () => {
   console.log(`[hyperoom-v2] realtime ws  on ws://${config.host}:${port}/realtime`);
 });
 
+// Retry DB connection at startup (postgres may still be booting)
+async function waitForDb() {
+  for (let i = 1; i <= 15; i++) {
+    try {
+      await pools.core.query("SELECT 1");
+      await pools.chat.query("SELECT 1");
+      await pools.storage.query("SELECT 1");
+      console.log("[hyperoom-v2] database ready");
+      return;
+    } catch (err) {
+      console.log(`[hyperoom-v2] waiting for database... (${i}/15) ${(err as Error).message.slice(0, 60)}`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  console.log("[hyperoom-v2] WARNING: database not ready after 30s — server masih jalan, DB retry dilanjut");
+}
+void waitForDb();
+
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
     console.log(`[hyperoom-v2] ${sig} — shutting down`);
