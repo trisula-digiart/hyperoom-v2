@@ -51,7 +51,9 @@ function BootLoader() {
   return (
     <div className="boot-wrap">
       <div className={`boot-card ${done ? "boot-done" : ""}`}>
-        <div className="boot-title">HYPEROOM <span>v2</span></div>
+        <div className="boot-logo-wrap">
+          <img src="/logo.jpg" alt="Hyperoom" className="boot-logo-img" />
+        </div>
         <div className="boot-screen">
           {BOOT_LINES.slice(0, lineCount).map((line, i) => (
             <div key={i} className={`boot-line ${i === 0 ? "boot-brand" : ""}`}>
@@ -93,7 +95,9 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        <div className="auth-logo">Hyper<em>oom</em></div>
+        <div className="auth-logo-wrap">
+          <img src="/logo.jpg" alt="Hyperoom" className="auth-logo-img" />
+        </div>
         <div className="auth-sub">v2 — server rumah</div>
         <form onSubmit={submit} className="auth-form">
           {mode === "signup" && (
@@ -324,7 +328,7 @@ export default function App() {
       {/* ---- LEFT SIDEBAR ---- */}
       <aside className="sidebar-left">
         <div className="sidebar-logo">
-          <span className="logo-h">H</span>yper<em>oom</em>
+          <img src="/logo.jpg" alt="Hyperoom" className="sidebar-logo-img" />
           <span className="ws-dot" data-on={wsConnected} title={wsConnected ? "connected" : "disconnected"} />
         </div>
 

@@ -20,8 +20,7 @@ header {
   position: sticky; top: 0; z-index: 10;
 }
 .logo { display: flex; align-items: center; gap: 12px; }
-.logo-mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #6a5fc1, #422082); display: flex; align-items: center; justify-content: center; box-shadow: rgba(22,15,36,0.9) 0px 4px 4px 9px inset; }
-.logo-mark::before { content: 'H2'; color: #fff; font-weight: 700; font-size: 14px; }
+.logo img { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; }
 .logo h1 { font-size: 16px; font-weight: 600; }
 .logo .sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; }
 .pills { display: flex; gap: 10px; }
@@ -95,7 +94,7 @@ footer { text-align: center; padding: 18px; color: var(--muted); font-size: 10px
 
 <header>
   <div class="logo">
-    <div class="logo-mark"></div>
+    <img src="/logo.jpg" alt="Hyperoom">
     <div><h1>HYPEROOM v2</h1><div class="sub">Dashboard · Server Rumah</div></div>
   </div>
   <div class="pills">
