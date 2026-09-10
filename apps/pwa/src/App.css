@@ -116,7 +116,7 @@ body { height: 100vh; overflow: hidden; }
 
 /* ---- Left Sidebar ---- */
 .sidebar-left {
-  width: 240px; background: var(--sidebar); border-right: 1px solid var(--border);
+  width: 290px; background: var(--sidebar); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; flex-shrink: 0;
 }
 .sidebar-logo {
@@ -145,6 +145,7 @@ body { height: 100vh; overflow: hidden; }
 .room-item {
   padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 14px;
   color: var(--text); display: flex; align-items: center; gap: 4px;
+  white-space: normal; word-break: break-word; line-height: 1.35;
   transition: background 0.1s;
 }
 .room-item:hover { background: rgba(0,0,0,0.05); }
@@ -160,7 +161,7 @@ body { height: 100vh; overflow: hidden; }
   color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
 }
 .user-info { flex: 1; min-width: 0; }
-.user-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-name { font-size: 13px; font-weight: 600; white-space: normal; word-break: break-word; line-height: 1.3; }
 .user-id { font-size: 11px; color: var(--text-dim); }
 
 /* ---- Main Panel ---- */
@@ -210,7 +211,7 @@ body { height: 100vh; overflow: hidden; }
 
 /* ---- Right Sidebar ---- */
 .sidebar-right {
-  width: 200px; background: var(--sidebar); border-left: 1px solid var(--border);
+  width: 240px; background: var(--sidebar); border-left: 1px solid var(--border);
   display: flex; flex-direction: column; flex-shrink: 0;
 }
 .member-list { flex: 1; overflow-y: auto; padding: 0 8px; }
@@ -230,7 +231,10 @@ body { height: 100vh; overflow: hidden; }
   border-radius: 50%; background: var(--border); border: 2px solid var(--sidebar);
 }
 .member-dot.online { background: var(--success); }
-.member-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.member-name {
+  font-size: 13px; font-weight: 500; white-space: normal; word-break: break-word;
+  line-height: 1.35;
+}
 .member-role {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
   background: rgba(37,99,235,0.1); color: var(--accent); padding: 1px 5px; border-radius: 4px;
@@ -242,10 +246,15 @@ body { height: 100vh; overflow: hidden; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .sidebar-right { display: none; }
-  .sidebar-left { width: 60px; }
-  .sidebar-logo em, .room-hash, .sidebar-heading, .user-info, .sidebar-empty { display: none; }
-  .room-item { justify-content: center; padding: 10px; }
+  .sidebar-left { width: 56px; }
+  .sidebar-logo em, .room-hash, .sidebar-heading, .user-info, .sidebar-empty, .create-room { display: none; }
+  .room-item { justify-content: center; padding: 10px; word-break: normal; }
+  .room-item span { display: none; }
   .input-prefix { display: none; }
+}
+
+@media (max-width: 640px) {
+  .sidebar-left { display: none; }
 }
