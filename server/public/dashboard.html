@@ -105,13 +105,6 @@ footer { text-align: center; padding: 18px; color: var(--muted); font-size: 10px
 </header>
 
 <main>
-  <div class="login-banner" id="loginBanner">
-    <span>Login dulu buat sinkron dashboard (username/password sama kaya aplikasi):</span>
-    <input id="loginUser" placeholder="username" />
-    <input id="loginPass" type="password" placeholder="password" />
-    <button id="loginBtn" onclick="doLogin()">Masuk</button>
-    <span class="login-err" id="loginErr"></span>
-  </div>
   <div class="stats">
     <div class="stat"><div class="label">User Terdaftar</div><div class="value" id="stUsers">—</div><div class="hint">total akun</div></div>
     <div class="stat"><div class="label">Online Sekarang</div><div class="value" id="stOnline">—</div><div class="hint">aktif 5 menit</div></div>
@@ -222,19 +215,9 @@ function renderOverview(d) {
 
 async function refresh() {
   try {
-    const tok = localStorage.getItem('h2_token');
-    const banner = document.getElementById('loginBanner');
-    if (!tok) {
-      setStatus('status', 'LOGIN DULU', false);
-      if (banner) banner.style.display = 'flex';
-      document.querySelectorAll('tbody').forEach(t => t.innerHTML = '<tr><td colspan="5" class="empty">— login dulu —</td></tr>');
-      return;
-    }
-    if (banner) banner.style.display = 'none';
-    const headers = { 'Authorization': 'Bearer ' + tok };
     const [mon, ov] = await Promise.all([
-      fetch('/monitor', { headers }).then(r => r.json()),
-      fetch('/api/admin/overview', { headers }).then(r => r.json()),
+      fetch('/monitor').then(r => r.json()),
+      fetch('/api/admin/overview').then(r => r.json()),
     ]);
     setStatus('status', 'ONLINE', true);
     $('stWs').textContent = mon.realtime?.connections ?? 0;
@@ -250,11 +233,11 @@ async function refresh() {
   }
 }
 
-// WS realtime — subscribe all rooms for live events
+// WS realtime — live events (kalau token tersedia dari app session)
 function connectWs() {
   const tok = localStorage.getItem('h2_token') || '';
-  if (!tok) { setStatus('ws', 'LOGIN DULU', false); return; }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (!tok) { setStatus('ws', 'WS POLL', true); return; }
   const ws = new WebSocket(`${proto}//${location.host}/realtime?token=${tok}`);
   ws.onopen = () => {
     setStatus('ws', 'WS LIVE', true);
@@ -286,22 +269,6 @@ function connectWs() {
     setTimeout(connectWs, 2000);
   };
   ws.onerror = () => ws.close();
-}
-
-async function doLogin() {
-  const u = document.getElementById('loginUser').value.trim();
-  const p = document.getElementById('loginPass').value;
-  const errEl = document.getElementById('loginErr');
-  errEl.textContent = '';
-  try {
-    const r = await fetch('/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p }),
-    }).then(r => r.json());
-    if (!r.token) { errEl.textContent = r.error || 'gagal login'; return; }
-    localStorage.setItem('h2_token', r.token);
-    location.reload();
-  } catch (e) { errEl.textContent = 'gagal: ' + e; }
 }
 
 refresh();

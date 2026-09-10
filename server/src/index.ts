@@ -279,11 +279,12 @@ app.get("/monitor", async (req, res) => {
   });
 });
 
-// ---------- ADMIN OVERVIEW (dashboard) ----------
-app.get("/api/admin/overview", requireAuth, async (req, res) => {
+// ---------- ADMIN OVERVIEW (dashboard, public read-only) ----------
+// Public dashboard: non-sensitive aggregate + room info. No phone, no tokens.
+app.get("/api/admin/overview", async (req, res) => {
   try {
     const users = await pools.core.query(
-      `SELECT id, username, display_name, platform_role, last_seen_at,
+      `SELECT id, username, display_name, platform_role,
               (last_seen_at > now() - interval '5 minutes') AS online_now
        FROM public.users ORDER BY created_at`
     );
@@ -299,7 +300,6 @@ app.get("/api/admin/overview", requireAuth, async (req, res) => {
       `SELECT id, room_id, author_id, kind, content, created_at
        FROM public.messages ORDER BY created_at DESC LIMIT 20`
     );
-    // resolve author names via core users (in-memory map, no cross-DB join)
     const userMap = new Map(users.rows.map((u) => [u.id, u.display_name || u.username]));
     const recentMessages = msgs.rows.map((m) => ({
       id: m.id,
