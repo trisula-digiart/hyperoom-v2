@@ -1,0 +1,227 @@
+import type { Message, Presence, Profile, Room, RoomMember, RoomRole } from "@hyperoom/domain";
+import { pools } from "./db.js";
+
+export interface DbUser {
+  id: string;
+  username: string;
+  password_hash: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+}
+
+function rowToProfile(r: DbUser): Profile {
+  return {
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name ?? undefined,
+    avatarUrl: r.avatar_url ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
+// ---------- AUTH / USERS (core) ----------
+
+export async function createUser(username: string, passwordHash: string, displayName?: string): Promise<Profile> {
+  const r = await pools.core.query<DbUser>(
+    `INSERT INTO public.users (username, password_hash, display_name)
+     VALUES ($1, $2, $3) RETURNING *`,
+    [username, passwordHash, displayName ?? null]
+  );
+  return rowToProfile(r.rows[0]);
+}
+
+export async function findUserByUsername(username: string): Promise<DbUser | null> {
+  const r = await pools.core.query<DbUser>(
+    `SELECT * FROM public.users WHERE username = $1`,
+    [username]
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function findUserById(id: string): Promise<DbUser | null> {
+  const r = await pools.core.query<DbUser>(`SELECT * FROM public.users WHERE id = $1`, [id]);
+  return r.rows[0] ?? null;
+}
+
+// ---------- ROOMS (core) ----------
+
+interface RoomRow {
+  id: string;
+  name: string;
+  type: string;
+  topic: string | null;
+  is_locked: boolean;
+  owner_id: string;
+  created_at: string;
+}
+
+function rowToRoom(r: RoomRow): Room {
+  return {
+    id: r.id,
+    name: r.name,
+    type: r.type as Room["type"],
+    topic: r.topic ?? undefined,
+    isLocked: r.is_locked,
+    ownerId: r.owner_id,
+    createdAt: r.created_at,
+  };
+}
+
+export async function createRoom(name: string, type: string, ownerId: string, topic?: string): Promise<Room> {
+  const client = await pools.core.connect();
+  try {
+    await client.query("BEGIN");
+    const room = await client.query<RoomRow>(
+      `INSERT INTO public.rooms (name, type, topic, owner_id)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, type, topic ?? null, ownerId]
+    );
+    await client.query(
+      `INSERT INTO public.room_members (room_id, user_id, role) VALUES ($1, $2, 'owner')`,
+      [room.rows[0].id, ownerId]
+    );
+    await client.query("COMMIT");
+    return rowToRoom(room.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listRoomsForUser(userId: string): Promise<Room[]> {
+  const r = await pools.core.query<RoomRow>(
+    `SELECT r.* FROM public.rooms r
+     LEFT JOIN public.room_members m ON m.room_id = r.id AND m.user_id = $1
+     WHERE r.type = 'public' OR m.user_id IS NOT NULL
+     ORDER BY r.name`,
+    [userId]
+  );
+  return r.rows.map(rowToRoom);
+}
+
+export async function findRoomById(id: string): Promise<Room | null> {
+  const r = await pools.core.query<RoomRow>(`SELECT * FROM public.rooms WHERE id = $1`, [id]);
+  return r.rows[0] ? rowToRoom(r.rows[0]) : null;
+}
+
+export async function findRoomByName(name: string): Promise<Room | null> {
+  const r = await pools.core.query<RoomRow>(`SELECT * FROM public.rooms WHERE name = $1`, [name]);
+  return r.rows[0] ? rowToRoom(r.rows[0]) : null;
+}
+
+export async function joinRoom(roomId: string, userId: string): Promise<RoomMember> {
+  const r = await pools.core.query<{ room_id: string; user_id: string; role: string; joined_at: string }>(
+    `INSERT INTO public.room_members (room_id, user_id, role)
+     VALUES ($1, $2, 'member')
+     ON CONFLICT (room_id, user_id) DO UPDATE SET role = room_members.role
+     RETURNING room_id, user_id, role, joined_at`,
+    [roomId, userId]
+  );
+  return { roomId: r.rows[0].room_id, userId: r.rows[0].user_id, role: r.rows[0].role as RoomRole, joinedAt: r.rows[0].joined_at };
+}
+
+export async function leaveRoom(roomId: string, userId: string): Promise<void> {
+  await pools.core.query(`DELETE FROM public.room_members WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+}
+
+export async function getMemberRole(roomId: string, userId: string): Promise<RoomRole | null> {
+  const r = await pools.core.query<{ role: string }>(
+    `SELECT role FROM public.room_members WHERE room_id = $1 AND user_id = $2`,
+    [roomId, userId]
+  );
+  return r.rows[0] ? (r.rows[0].role as RoomRole) : null;
+}
+
+export async function listRoomMembers(roomId: string): Promise<RoomMember[]> {
+  const r = await pools.core.query<{ room_id: string; user_id: string; role: string; joined_at: string }>(
+    `SELECT room_id, user_id, role, joined_at FROM public.room_members WHERE room_id = $1 ORDER BY joined_at`,
+    [roomId]
+  );
+  return r.rows.map((x) => ({ roomId: x.room_id, userId: x.user_id, role: x.role as RoomRole, joinedAt: x.joined_at }));
+}
+
+// ---------- MESSAGES (chat) ----------
+
+interface MessageRow {
+  id: string;
+  room_id: string;
+  author_id: string;
+  kind: string;
+  content: string;
+  reply_to_message_id: string | null;
+  edited_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+}
+
+function rowToMessage(r: MessageRow): Message {
+  return {
+    id: r.id,
+    roomId: r.room_id,
+    authorId: r.author_id,
+    kind: r.kind as Message["kind"],
+    content: r.content,
+    replyToMessageId: r.reply_to_message_id,
+    editedAt: r.edited_at,
+    deletedAt: r.deleted_at,
+    createdAt: r.created_at,
+  };
+}
+
+export async function insertMessage(roomId: string, authorId: string, content: string, kind: string, replyTo?: string | null): Promise<Message> {
+  const r = await pools.chat.query<MessageRow>(
+    `INSERT INTO public.messages (room_id, author_id, kind, content, reply_to_message_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [roomId, authorId, kind, content, replyTo ?? null]
+  );
+  return rowToMessage(r.rows[0]);
+}
+
+export async function listMessages(roomId: string, limit = 100): Promise<Message[]> {
+  const r = await pools.chat.query<MessageRow>(
+    `SELECT * FROM public.messages WHERE room_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT $2`,
+    [roomId, limit]
+  );
+  return r.rows.map(rowToMessage);
+}
+
+export async function editMessage(messageId: string, content: string): Promise<Message> {
+  const r = await pools.chat.query<MessageRow>(
+    `UPDATE public.messages SET content = $2, edited_at = now() WHERE id = $1 RETURNING *`,
+    [messageId, content]
+  );
+  return rowToMessage(r.rows[0]);
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  await pools.chat.query(`UPDATE public.messages SET deleted_at = now() WHERE id = $1`, [messageId]);
+}
+
+export async function findMessage(messageId: string): Promise<MessageRow | null> {
+  const r = await pools.chat.query<MessageRow>(`SELECT * FROM public.messages WHERE id = $1`, [messageId]);
+  return r.rows[0] ?? null;
+}
+
+// ---------- PRESENCE (chat) ----------
+
+export async function setPresence(userId: string, status: string): Promise<Presence> {
+  const r = await pools.chat.query<{ user_id: string; status: string; last_seen_at: string }>(
+    `INSERT INTO public.presence (user_id, status, last_seen_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE SET status = $2, last_seen_at = now()
+     RETURNING user_id, status, last_seen_at`,
+    [userId, status]
+  );
+  return { userId: r.rows[0].user_id, status: r.rows[0].status as Presence["status"], lastSeenAt: r.rows[0].last_seen_at };
+}
+
+export async function getPresence(userId: string): Promise<Presence | null> {
+  const r = await pools.chat.query<{ user_id: string; status: string; last_seen_at: string }>(
+    `SELECT user_id, status, last_seen_at FROM public.presence WHERE user_id = $1`,
+    [userId]
+  );
+  return r.rows[0] ? { userId: r.rows[0].user_id, status: r.rows[0].status as Presence["status"], lastSeenAt: r.rows[0].last_seen_at } : null;
+}
