@@ -223,13 +223,14 @@ function renderOverview(d) {
 async function refresh() {
   try {
     const tok = localStorage.getItem('h2_token');
+    const banner = document.getElementById('loginBanner');
     if (!tok) {
       setStatus('status', 'LOGIN DULU', false);
-      document.getElementById('loginBanner').style.display = 'flex';
+      if (banner) banner.style.display = 'flex';
       document.querySelectorAll('tbody').forEach(t => t.innerHTML = '<tr><td colspan="5" class="empty">— login dulu —</td></tr>');
       return;
     }
-    document.getElementById('loginBanner').style.display = 'none';
+    if (banner) banner.style.display = 'none';
     const headers = { 'Authorization': 'Bearer ' + tok };
     const [mon, ov] = await Promise.all([
       fetch('/monitor', { headers }).then(r => r.json()),

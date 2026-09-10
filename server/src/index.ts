@@ -326,8 +326,15 @@ app.get("/api/admin/overview", requireAuth, async (req, res) => {
 });
 
 // Dashboard static (premium, bright — consistent with app)
-app.use(express.static(path.join(__dirname, "..", "public")));
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "dashboard.html")));
+app.use(express.static(path.join(__dirname, "..", "public"), {
+  setHeaders: (res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  },
+}));
+app.get("/", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  res.sendFile(path.join(__dirname, "..", "public", "dashboard.html"));
+});
 
 const port = config.port;
 server.listen(port, config.host, () => {
