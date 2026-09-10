@@ -54,7 +54,11 @@ export function useRealtime({ onEvent, onOpen, onClose }: UseRealtimeOpts) {
     connect();
     return () => {
       clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      // close only if already open; a CONNECTING socket closing mid-handshake
+      // triggers a noisy "closed before established" console error.
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     };
   }, [connect]);
 
