@@ -279,6 +279,56 @@ app.get("/monitor", async (req, res) => {
   });
 });
 
+// ---------- ADMIN OVERVIEW (dashboard) ----------
+app.get("/api/admin/overview", requireAuth, async (req, res) => {
+  try {
+    const users = await pools.core.query(
+      `SELECT id, username, display_name, platform_role, last_seen_at,
+              (last_seen_at > now() - interval '5 minutes') AS online_now
+       FROM public.users ORDER BY created_at`
+    );
+    const rooms = await pools.core.query(
+      `SELECT r.id, r.name, r.type, r.topic, r.is_locked, r.created_at,
+              u.username AS owner_username,
+              (SELECT count(*) FROM public.room_members m WHERE m.room_id = r.id) AS member_count
+       FROM public.rooms r
+       LEFT JOIN public.users u ON u.id = r.owner_id
+       ORDER BY r.name`
+    );
+    const msgs = await pools.chat.query(
+      `SELECT id, room_id, author_id, kind, content, created_at
+       FROM public.messages ORDER BY created_at DESC LIMIT 20`
+    );
+    // resolve author names via core users (in-memory map, no cross-DB join)
+    const userMap = new Map(users.rows.map((u) => [u.id, u.display_name || u.username]));
+    const recentMessages = msgs.rows.map((m) => ({
+      id: m.id,
+      roomId: m.room_id,
+      kind: m.kind,
+      content: m.content,
+      createdAt: m.created_at,
+      author: userMap.get(m.author_id) || m.author_id.slice(0, 8),
+    }));
+    res.json({
+      counts: {
+        users: users.rows.length,
+        onlineNow: users.rows.filter((u) => u.online_now).length,
+        rooms: rooms.rows.length,
+        messages: (await pools.chat.query(`SELECT count(*)::int AS c FROM public.messages`)).rows[0].c,
+      },
+      users: users.rows.slice(0, 50),
+      rooms: rooms.rows,
+      recentMessages,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Dashboard static (premium, bright — consistent with app)
+app.use(express.static(path.join(__dirname, "..", "public")));
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "dashboard.html")));
+
 const port = config.port;
 server.listen(port, config.host, () => {
   console.log(`[hyperoom-v2] listening on http://${config.host}:${port} (${config.env})`);

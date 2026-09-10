@@ -71,6 +71,13 @@ export class HyperoomRealtime {
         break;
       case "room:join":
         if (typeof msg.roomId === "string") {
+          if (msg.roomId === "*") {
+            // wildcard: subscribe to ALL rooms (dashboard/monitor)
+            (socket as LiveSocket & { _wildcard?: boolean })._wildcard = true;
+            socket.send(JSON.stringify({ type: "room:join:ack", roomId: "*", ok: true } satisfies RealtimeEvent));
+            this.log(`user=${session.userId} subscribed ALL (wildcard)`);
+            break;
+          }
           this.subscribe(socket, msg.roomId);
           socket.send(JSON.stringify({ type: "room:join:ack", roomId: msg.roomId, ok: true } satisfies RealtimeEvent));
           this.log(`user=${session.userId} subscribed room=${msg.roomId.slice(0, 8)}`);
@@ -101,6 +108,7 @@ export class HyperoomRealtime {
     for (const [roomId, set] of this.channels) {
       if (set.delete(socket) && set.size === 0) this.channels.delete(roomId);
     }
+    delete (socket as LiveSocket & { _wildcard?: boolean })._wildcard;
     void setPresence(session.userId, "offline").then((p) => {
       this.broadcast({ type: "presence:update", presence: p } satisfies RealtimeEvent);
     });
@@ -118,12 +126,15 @@ export class HyperoomRealtime {
     if (set) { set.delete(socket); if (set.size === 0) this.channels.delete(roomId); }
   }
 
-  /** Emit event to everyone subscribed to a room */
+  /** Emit event to everyone subscribed to a room (incl. wildcard/dashboard) */
   broadcastToRoom(roomId: string, evt: RealtimeEvent) {
-    const set = this.channels.get(roomId);
-    if (!set) return;
     const raw = JSON.stringify(evt);
-    for (const s of set) if (s.readyState === 1) s.send(raw);
+    const set = this.channels.get(roomId);
+    if (set) for (const s of set) if (s.readyState === 1) s.send(raw);
+    // wildcard subscribers (dashboard) receive all room events
+    for (const s of this.sessions.keys()) {
+      if (s.readyState === 1 && (s as LiveSocket)._wildcard) s.send(raw);
+    }
   }
 
   /** Emit event to all connected sockets */

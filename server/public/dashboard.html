@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hyperoom v2 — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #150f23; --bg: #1f1633; --border: #362d59; --text: #fff; --dim: #e5e7eb;
+  --muted: #9a8fb8; --purple: #6a5fc1; --lime: #c2ef4e; --coral: #ffb287; --pink: #fa7faa;
+  --ok: #c2ef4e; --fail: #fa7faa; --warn: #ffb287;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Rubik', system-ui, sans-serif; background: var(--bg-deep); color: var(--text); min-height: 100vh; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+header {
+  display: flex; align-items: center; justify-content: space-between; padding: 14px 28px;
+  border-bottom: 1px solid var(--border); background: rgba(31,22,51,0.7); backdrop-filter: blur(18px) saturate(180%);
+  position: sticky; top: 0; z-index: 10;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #6a5fc1, #422082); display: flex; align-items: center; justify-content: center; box-shadow: rgba(22,15,36,0.9) 0px 4px 4px 9px inset; }
+.logo-mark::before { content: 'H2'; color: #fff; font-weight: 700; font-size: 14px; }
+.logo h1 { font-size: 16px; font-weight: 600; }
+.logo .sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; }
+.pills { display: flex; gap: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 18px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid var(--border); background: rgba(54,45,89,0.4); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px var(--lime); animation: pulse 2s infinite; }
+.pill.off .dot { background: var(--fail); box-shadow: 0 0 8px var(--fail); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+main { max-width: 1152px; margin: 0 auto; padding: 24px 24px 60px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: rgba(0,0,0,0.1) 0 10px 15px -3px; }
+.stat .label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 6px; }
+.stat .value { font-size: 24px; font-weight: 500; font-family: 'JetBrains Mono', monospace; }
+.stat .value small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.stat .hint { font-size: 9px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.6px; }
+.zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.zone { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 13px; display: flex; align-items: center; gap: 12px; }
+.zone .icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.zone.core .icon { background: rgba(106,95,193,0.18); color: var(--purple); }
+.zone.chat .icon { background: rgba(194,239,78,0.12); color: var(--lime); }
+.zone.storage .icon { background: rgba(255,178,135,0.12); color: var(--coral); }
+.zone .zname { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.zone .zstatus { font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.zone .zstatus.ok { color: var(--ok); } .zone .zstatus.fail { color: var(--fail); }
+.grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: rgba(0,0,0,0.1) 0 10px 15px -3px; overflow: hidden; margin-bottom: 18px; }
+.card-head { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; background: rgba(54,45,89,0.2); }
+.card-head .live { color: var(--lime); letter-spacing: 2px; display: flex; align-items: center; gap: 6px; }
+.card-head .live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lime); animation: pulse 1s infinite; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted); padding: 9px 14px; border-bottom: 1px solid var(--border); }
+td { padding: 9px 14px; border-bottom: 1px solid rgba(54,45,89,0.5); font-size: 12px; }
+td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
+tr:last-child td { border-bottom: none; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.dot.on { background: var(--ok); } .dot.off { background: var(--muted); }
+.role-badge { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.role-badge.owner { background: rgba(194,239,78,0.15); color: var(--lime); }
+.role-badge.admin { background: rgba(106,95,193,0.25); color: #b3a8ff; }
+.role-badge.member { background: rgba(154,143,184,0.15); color: var(--muted); }
+.sys { color: var(--muted); font-style: italic; }
+.feed { max-height: 380px; overflow-y: auto; }
+.feed-item { padding: 7px 14px; border-bottom: 1px solid rgba(54,45,89,0.3); font-size: 11px; display: flex; gap: 8px; animation: slidein 0.3s; }
+@keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+.feed-item:last-child { border-bottom: none; }
+.f-time { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; white-space: nowrap; }
+.f-body { color: var(--dim); word-break: break-word; }
+.f-body b { color: var(--text); }
+.f-body .chan { color: var(--lime); }
+.empty { color: var(--muted); padding: 14px; font-size: 12px; font-style: italic; }
+.login-banner {
+  display: none; align-items: center; gap: 10px; background: rgba(106,95,193,0.12);
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 18px;
+  font-size: 12px; color: var(--dim); flex-wrap: wrap;
+}
+.login-banner input {
+  background: #0f1424; border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; padding: 7px 10px; font-size: 13px; width: 140px;
+}
+.login-banner input:focus { outline: none; border-color: var(--purple); }
+.login-banner button {
+  background: var(--purple); border: none; color: #fff; border-radius: 7px;
+  padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.login-banner button:hover { background: #7b6fd1; }
+.login-err { color: var(--fail); font-size: 12px; }
+footer { text-align: center; padding: 18px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark"></div>
+    <div><h1>HYPEROOM v2</h1><div class="sub">Dashboard · Server Rumah</div></div>
+  </div>
+  <div class="pills">
+    <div class="pill" id="wsPill"><span class="dot"></span><span id="wsText">WS…</span></div>
+    <div class="pill" id="statusPill"><span class="dot"></span><span id="statusText">Cek…</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="login-banner" id="loginBanner">
+    <span>Login dulu buat sinkron dashboard (username/password sama kaya aplikasi):</span>
+    <input id="loginUser" placeholder="username" />
+    <input id="loginPass" type="password" placeholder="password" />
+    <button id="loginBtn" onclick="doLogin()">Masuk</button>
+    <span class="login-err" id="loginErr"></span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="label">User Terdaftar</div><div class="value" id="stUsers">—</div><div class="hint">total akun</div></div>
+    <div class="stat"><div class="label">Online Sekarang</div><div class="value" id="stOnline">—</div><div class="hint">aktif 5 menit</div></div>
+    <div class="stat"><div class="label">Ruangan</div><div class="value" id="stRooms">—</div><div class="hint">channels total</div></div>
+    <div class="stat"><div class="label">Total Pesan</div><div class="value" id="stMsgs">—</div><div class="hint">tersimpan</div></div>
+    <div class="stat"><div class="label">WS Koneksi</div><div class="value" id="stWs">—</div><div class="hint">realtime</div></div>
+  </div>
+
+  <div class="zones">
+    <div class="zone core"><div class="icon">C</div><div><div class="zname">CORE</div><div class="zstatus" id="zCore">…</div></div></div>
+    <div class="zone chat"><div class="icon">#</div><div><div class="zname">CHAT</div><div class="zstatus" id="zChat">…</div></div></div>
+    <div class="zone storage"><div class="icon">S</div><div><div class="zname">STORAGE</div><div class="zstatus" id="zStorage">…</div></div></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-head"><span>User</span><span id="userCount"></span></div>
+        <table id="userTable"><tbody><tr><td colspan="4" class="empty">muat…</td></tr></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-head"><span>Ruangan</span><span id="roomCount"></span></div>
+        <table id="roomTable"><tbody><tr><td colspan="5" class="empty">muat…</td></tr></tbody></table>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-head"><span>Pesan Terbaru</span></div>
+        <table id="msgTable"><tbody><tr><td colspan="3" class="empty">muat…</td></tr></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-head"><span>Event Realtime</span><span class="live">LIVE</span></div>
+        <div class="feed" id="feed"><div class="empty">nyambung…</div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>hyperoom v2 · server rumah · arsitektur lokal · sinkron DB</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = (s) => esc(String(s || "").slice(0, 8));
+const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString('id-ID', { hour12: false }); } catch { return ""; } };
+const now_hms = () => new Date().toLocaleTimeString('id-ID', { hour12: false });
+const MAX_FEED = 40;
+
+function feed(type, html) {
+  const feedEl = $('feed');
+  const el = document.createElement('div');
+  el.className = 'feed-item';
+  el.innerHTML = `<span class="f-time">${now_hms()}</span><span class="f-body">${html}</span>`;
+  feedEl.prepend(el);
+  while (feedEl.children.length > MAX_FEED) feedEl.lastChild.remove();
+  const em = feedEl.querySelector('.empty'); if (em) em.remove();
+}
+
+function setStatus(pillId, txt, isOk) {
+  $(pillId + 'Text').textContent = txt;
+  $(pillId).classList.toggle('off', !isOk);
+}
+
+function renderOverview(d) {
+  $('stUsers').textContent = d.counts?.users ?? 0;
+  $('stOnline').textContent = d.counts?.onlineNow ?? 0;
+  $('stRooms').textContent = d.counts?.rooms ?? 0;
+  $('stMsgs').textContent = d.counts?.messages ?? 0;
+
+  const ut = $('userTable');
+  if (!d.users?.length) { ut.innerHTML = '<tr><td colspan="4" class="empty">belum ada user</td></tr>'; }
+  else {
+    $('userCount').textContent = d.users.length;
+    ut.innerHTML = '<tr><th>User</th><th>Role</th><th>Status</th><th>Terakhir</th></tr>' + d.users.map(u => `
+      <tr>
+        <td><span class="dot ${u.online_now ? 'on' : 'off'}"></span>${esc(u.display_name || u.username)} <span class="mono" style="color:var(--muted)">@${esc(u.username)}</span></td>
+        <td><span class="role-badge ${u.platform_role === 'platform_owner' ? 'owner' : u.platform_role === 'admin' ? 'admin' : 'member'}">${esc(u.platform_role)}</span></td>
+        <td>${u.online_now ? '<span style="color:var(--ok)">online</span>' : '<span style="color:var(--muted)">offline</span>'}</td>
+        <td class="mono">${fmtTime(u.last_seen_at)}</td>
+      </tr>`).join('');
+  }
+
+  const rt = $('roomTable');
+  if (!d.rooms?.length) { rt.innerHTML = '<tr><td colspan="5" class="empty">belum ada ruangan</td></tr>'; }
+  else {
+    $('roomCount').textContent = d.rooms.length;
+    rt.innerHTML = '<tr><th>Ruangan</th><th>Tipe</th><th>Pemilik</th><th>Anggota</th><th>Topik</th></tr>' + d.rooms.map(r => `
+      <tr>
+        <td class="mono">#${esc(r.name.replace(/^#/,''))} ${r.is_locked ? '🔒' : ''}</td>
+        <td>${esc(r.type)}</td>
+        <td>${esc(r.owner_username || short(r.id))}</td>
+        <td class="mono">${r.member_count}</td>
+        <td class="mono" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.topic || '—')}</td>
+      </tr>`).join('');
+  }
+
+  const mt = $('msgTable');
+  if (!d.recentMessages?.length) { mt.innerHTML = '<tr><td colspan="3" class="empty">belum ada pesan</td></tr>'; }
+  else {
+    mt.innerHTML = '<tr><th>Waktu</th><th>Author</th><th>Isi</th></tr>' + d.recentMessages.map(m => `
+      <tr>
+        <td class="mono">${fmtTime(m.createdAt)}</td>
+        <td>${esc(m.author)}</td>
+        <td class="${m.kind === 'system' ? 'sys' : ''}">${esc(m.content)}</td>
+      </tr>`).join('');
+  }
+}
+
+async function refresh() {
+  try {
+    const tok = localStorage.getItem('h2_token');
+    if (!tok) {
+      setStatus('status', 'LOGIN DULU', false);
+      document.getElementById('loginBanner').style.display = 'flex';
+      document.querySelectorAll('tbody').forEach(t => t.innerHTML = '<tr><td colspan="5" class="empty">— login dulu —</td></tr>');
+      return;
+    }
+    document.getElementById('loginBanner').style.display = 'none';
+    const headers = { 'Authorization': 'Bearer ' + tok };
+    const [mon, ov] = await Promise.all([
+      fetch('/monitor', { headers }).then(r => r.json()),
+      fetch('/api/admin/overview', { headers }).then(r => r.json()),
+    ]);
+    setStatus('status', 'ONLINE', true);
+    $('stWs').textContent = mon.realtime?.connections ?? 0;
+    const db = mon.db || [];
+    const zoneMap = { core: 'zCore', chat: 'zChat', storage: 'zStorage' };
+    for (const z of db) {
+      const el = $(zoneMap[z.zone]);
+      if (el) { el.textContent = z.status.toLowerCase(); el.className = 'zstatus ' + (z.status === 'CONNECTED' ? 'ok' : 'fail'); }
+    }
+    renderOverview(ov);
+  } catch {
+    setStatus('status', 'OFFLINE', false);
+  }
+}
+
+// WS realtime — subscribe all rooms for live events
+function connectWs() {
+  const tok = localStorage.getItem('h2_token') || '';
+  if (!tok) { setStatus('ws', 'LOGIN DULU', false); return; }
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/realtime?token=${tok}`);
+  ws.onopen = () => {
+    setStatus('ws', 'WS LIVE', true);
+    feed('sys', '<b>WebSocket</b> tersambung');
+    ws.send(JSON.stringify({ type: 'room:join', roomId: '*' }));
+  };
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    switch (m.type) {
+      case 'message:new':
+        feed('msg', m.message.kind === 'system'
+          ? `<span class="sys">${esc(m.message.content)}</span>`
+          : `<b>${esc(m.message.authorId.slice(0, 8))}</b> → <span class="chan">#${esc((m.message.roomId || '').slice(0, 8))}</span>: ${esc(m.message.content)}`);
+        break;
+      case 'room:join':
+        feed('join', `<b>${esc((m.member?.userId || '').slice(0, 8))}</b> gabung ruangan`);
+        break;
+      case 'room:leave':
+        feed('leave', `<b>${esc((m.userId || '').slice(0, 8))}</b> keluar ruangan`);
+        break;
+      case 'presence:update':
+        feed('pres', `<b>@${esc((m.presence?.userId || '').slice(0, 8))}</b> ${m.presence?.status}`);
+        break;
+    }
+  };
+  ws.onclose = () => {
+    setStatus('ws', 'RESTART…', false);
+    feed('sys', '<b>WS</b> putus — nyambung ulang');
+    setTimeout(connectWs, 2000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+async function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p }),
+    }).then(r => r.json());
+    if (!r.token) { errEl.textContent = r.error || 'gagal login'; return; }
+    localStorage.setItem('h2_token', r.token);
+    location.reload();
+  } catch (e) { errEl.textContent = 'gagal: ' + e; }
+}
+
+refresh();
+setInterval(refresh, 3000);
+connectWs();
+</script>
+</body>
+</html>
