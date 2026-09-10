@@ -288,6 +288,35 @@ export default function App() {
 
   const handleLogout = () => { logout(); setSUser(null); };
 
+  // topic modal state
+  const [topicOpen, setTopicOpen] = useState(false);
+  const [topicVal, setTopicVal] = useState("");
+  const openTopicModal = () => { setTopicVal(activeRoom?.topic || ""); setTopicOpen(true); };
+  const saveTopic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeRoom) return;
+    try { await api("PATCH", `/api/rooms/${activeRoom.id}`, { topic: topicVal }); setActiveRoom({ ...activeRoom, topic: topicVal }); setTopicOpen(false); }
+    catch (err) { alert((err as Error).message); }
+  };
+  const handleLeaveRoom = async () => {
+    if (!activeRoom) return;
+    try {
+      await api("POST", `/api/rooms/${activeRoom.id}/leave`);
+      setActiveRoom(null);
+      api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => setRooms(r.rooms));
+    } catch (err) { alert((err as Error).message); }
+  };
+
+  const rolePrefix = (role: string) => {
+    switch (role) {
+      case "owner": return "@";
+      case "admin": return "@";
+      case "operator": return "@";
+      case "voice": return "+";
+      default: return "";
+    }
+  };
+
   if (!user) return <AuthScreen onAuthed={setSUser} />;
 
   return (
@@ -341,9 +370,16 @@ export default function App() {
             <span className="header-hash">#</span>
             <span className="header-room">{activeRoom?.name?.slice(1) || "pilih ruangan"}</span>
             {activeRoom?.topic && <span className="header-topic">{activeRoom.topic}</span>}
+            {activeRoom?.isLocked && <span className="lock-badge">🔒</span>}
           </div>
           <div className="main-header-right">
-            <span className="member-count">{members.length} anggota{members.length !== 1 ? "" : ""}</span>
+            <span className="member-count">{members.length} anggota</span>
+            {user?.id === activeRoom?.ownerId && (
+              <button className="btn-link" onClick={openTopicModal} title="Ubah topik">✎ topik</button>
+            )}
+            {activeRoom && user?.id !== activeRoom.ownerId && (
+              <button className="btn-link leave-btn" onClick={handleLeaveRoom}>keluar</button>
+            )}
           </div>
         </div>
 
@@ -405,6 +441,7 @@ export default function App() {
                   const pres = presenceMap.get(m.userId);
                   const isOnline = pres?.status === "online";
                   const nick = m.displayName || m.username || shortId(m.userId);
+                  const prefix = m.role !== "member" ? rolePrefix(m.role) : "";
                   return (
                     <div key={m.userId} className="member-item">
                       <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
@@ -412,7 +449,7 @@ export default function App() {
                         <span className={`member-dot ${isOnline ? "online" : ""}`} />
                       </div>
                       <div className="member-name" style={{ color: nickColor(m.userId) }}>
-                        {nick}
+                        <span className={`role-prefix ${m.role}`}>{prefix}</span>{nick}
                       </div>
                     </div>
                   );
@@ -423,6 +460,22 @@ export default function App() {
           {members.length === 0 && <div className="sidebar-empty">no members</div>}
         </div>
       </aside>
+
+      {/* Topic modal */}
+      {topicOpen && (
+        <div className="modal-overlay" onClick={() => setTopicOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Ubah topik #{activeRoom?.name?.slice(1)}</h3>
+            <form onSubmit={saveTopic}>
+              <input value={topicVal} onChange={e => setTopicVal(e.target.value)} placeholder="Topik ruangan…" autoFocus />
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setTopicOpen(false)}>Batal</button>
+                <button type="submit" className="btn-primary">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

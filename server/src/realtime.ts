@@ -69,6 +69,19 @@ export class HyperoomRealtime {
       case "ping":
         socket.send(JSON.stringify({ type: "hello", userId: session.userId, serverTime: new Date().toISOString() }));
         break;
+      case "room:join":
+        if (typeof msg.roomId === "string") {
+          this.subscribe(socket, msg.roomId);
+          socket.send(JSON.stringify({ type: "room:join:ack", roomId: msg.roomId, ok: true } satisfies RealtimeEvent));
+          this.log(`user=${session.userId} subscribed room=${msg.roomId.slice(0, 8)}`);
+        }
+        break;
+      case "room:leave":
+        if (typeof msg.roomId === "string") {
+          this.unsubscribe(socket, msg.roomId);
+          socket.send(JSON.stringify({ type: "room:leave:ack", roomId: msg.roomId, ok: true } satisfies RealtimeEvent));
+        }
+        break;
       case "typing:start":
         this.broadcastToRoom(String(msg.roomId), { type: "typing:start", roomId: String(msg.roomId), userId: session.userId } satisfies RealtimeEvent);
         break;

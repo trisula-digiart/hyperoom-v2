@@ -69,6 +69,8 @@ export type RealtimeEvent =
   | { type: "reaction:remove"; messageId: string; userId: string; emoji: string }
   | { type: "room:join"; roomId: string; member: RoomMember }
   | { type: "room:leave"; roomId: string; userId: string }
+  | { type: "room:join:ack"; roomId: string; ok: true }
+  | { type: "room:leave:ack"; roomId: string; ok: true }
   | { type: "presence:update"; presence: Presence }
   | { type: "typing:start"; roomId: string; userId: string }
   | { type: "typing:stop"; roomId: string; userId: string }

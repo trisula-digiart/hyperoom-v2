@@ -9,7 +9,7 @@ import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth.js"
 import {
   createUser, findUserByUsername, findUserById,
   createRoom, listRoomsForUser, findRoomById, findRoomByName,
-  joinRoom, leaveRoom, getMemberRole, listRoomMembers, listRoomMembersDetailed,
+  joinRoom, leaveRoom, getMemberRole, listRoomMembers, listRoomMembersDetailed, setRoomTopic, isRoomMember,
   insertMessage, listMessages, editMessage, deleteMessage, findMessage,
   setPresence, getPresence, touchUserSeen,
 } from "./repository.js";
@@ -150,34 +150,61 @@ app.post("/api/rooms", requireAuth, async (req, res) => {
 app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const room = await findRoomById(req.params.id);
-  if (!room) return res.status(404).json({ error: "room not found" });
+  if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  if (room.isLocked) {
+    const role = await getMemberRole(room.id, req2.userId);
+    if (!role) return res.status(403).json({ error: "ruangan terkunci, undangan diperlukan" });
+  }
   const member = await joinRoom(room.id, req2.userId);
+  // real join event: system message + broadcast
+  const user = await findUserById(req2.userId);
+  const nick = user?.display_name || user?.username || "seseorang";
+  const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} gabung ke ${room.name}`, "system");
   realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member });
-  // add socket subscription when WS present? handled client-side via WS join
+  realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
   res.json({ room, member });
 });
 
 app.post("/api/rooms/:id/leave", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
+  const room = await findRoomById(req.params.id);
+  if (room) {
+    const user = await findUserById(req2.userId);
+    const nick = user?.display_name || user?.username || "seseorang";
+    const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} keluar dari ${room.name}`, "system");
+    realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
+  }
   await leaveRoom(req.params.id, req2.userId);
   realtime.broadcastToRoom(req.params.id, { type: "room:leave", roomId: req.params.id, userId: req2.userId });
   res.json({ ok: true });
 });
 
 app.get("/api/rooms/:id/members", requireAuth, async (req, res) => {
+  const members = await listRoomMembersDetailed(req.params.id);
+  res.json({ members });
+});
+
+// PATCH /api/rooms/:id — topic, lock (owner/operator)
+app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const room = await findRoomById(req.params.id);
   if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
-  // Auto-join public room on view (real membership row, persistent)
-  if (room.type === "public") {
-    const role = await getMemberRole(room.id, req2.userId);
-    if (!role) {
-      const member = await joinRoom(room.id, req2.userId);
-      realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member });
-    }
+  const role = await getMemberRole(room.id, req2.userId);
+  const isOwner = role === "owner" || role === "admin";
+  if (!isOwner) return res.status(403).json({ error: "hanya pemilik yang bisa ubah ini" });
+
+  const { topic, isLocked } = req.body || {};
+  if (typeof topic === "string") {
+    await setRoomTopic(room.id, topic.trim() || null);
   }
-  const members = await listRoomMembersDetailed(req.params.id);
-  res.json({ members });
+  if (typeof isLocked === "boolean") {
+    await pools.core.query(`UPDATE public.rooms SET is_locked = $2, updated_at = now() WHERE id = $1`, [room.id, isLocked]);
+  }
+  const updated = await findRoomById(room.id);
+  // system message broadcast (real event)
+  const sysMsg = await insertMessage(room.id, req2.userId, `Topik ruangan: ${room.topic ?? "(kosong)"}`, "system");
+  realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
+  res.json({ room: updated });
 });
 
 // ---------- MESSAGES ----------

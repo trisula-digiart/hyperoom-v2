@@ -143,6 +143,15 @@ export async function getMemberRole(roomId: string, userId: string): Promise<Roo
   return r.rows[0] ? (r.rows[0].role as RoomRole) : null;
 }
 
+export async function setRoomTopic(roomId: string, topic: string | null): Promise<void> {
+  await pools.core.query(`UPDATE public.rooms SET topic = $2, updated_at = now() WHERE id = $1`, [roomId, topic]);
+}
+
+export async function isRoomMember(roomId: string, userId: string): Promise<boolean> {
+  const r = await pools.core.query(`SELECT 1 FROM public.room_members WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
 async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {
   const r = await pools.core.query(
     `SELECT m.room_id, m.user_id, m.role, m.joined_at, u.username, u.display_name

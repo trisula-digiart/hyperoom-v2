@@ -241,6 +241,36 @@ body { height: 100vh; overflow: hidden; }
   background: rgba(37,99,235,0.1); color: var(--accent); padding: 1px 5px; border-radius: 4px;
   margin-left: 4px;
 }
+.role-prefix { font-weight: 700; margin-right: 2px; }
+.role-prefix.owner, .role-prefix.admin, .role-prefix.operator { color: var(--error); }
+.role-prefix.voice { color: var(--success); }
+
+/* Lock */
+.lock-badge { font-size: 13px; margin-left: 4px; }
+
+/* Header buttons */
+.btn-link {
+  background: none; border: none; color: var(--accent); font-size: 12px; font-weight: 600;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.btn-link:hover { background: var(--accent-light); }
+.leave-btn { color: var(--error); }
+.leave-btn:hover { background: #fef2f2; }
+.btn-ghost { background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; font-size: 13px; cursor: pointer; color: var(--text); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.4); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal {
+  background: var(--card); border-radius: var(--radius-lg); padding: 24px; width: 380px; max-width: 90vw;
+  box-shadow: var(--shadow-lg);
+}
+.modal h3 { font-size: 15px; margin-bottom: 14px; }
+.modal input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; }
+.modal input:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
 /* Spinner */
 .spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
