@@ -9,9 +9,9 @@ import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth.js"
 import {
   createUser, findUserByUsername, findUserById,
   createRoom, listRoomsForUser, findRoomById, findRoomByName,
-  joinRoom, leaveRoom, getMemberRole, listRoomMembers,
+  joinRoom, leaveRoom, getMemberRole, listRoomMembers, listRoomMembersDetailed,
   insertMessage, listMessages, editMessage, deleteMessage, findMessage,
-  setPresence, getPresence,
+  setPresence, getPresence, touchUserSeen,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 
@@ -138,7 +138,7 @@ app.get("/api/rooms/:id/members", requireAuth, async (req, res) => {
       realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member });
     }
   }
-  const members = await listRoomMembers(req.params.id);
+  const members = await listRoomMembersDetailed(req.params.id);
   res.json({ members });
 });
 

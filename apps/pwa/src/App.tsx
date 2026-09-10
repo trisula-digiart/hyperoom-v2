@@ -6,7 +6,7 @@ import "./App.css";
 // --- Types ---
 interface Profile { id: string; username: string; displayName?: string; createdAt: string }
 interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string }
-interface Member { roomId: string; userId: string; role: string; joinedAt: string }
+interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null }
 interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null }
 interface Presence { userId: string; status: string }
 
@@ -404,14 +404,15 @@ export default function App() {
                 {group.map(m => {
                   const pres = presenceMap.get(m.userId);
                   const isOnline = pres?.status === "online";
+                  const nick = m.displayName || m.username || shortId(m.userId);
                   return (
                     <div key={m.userId} className="member-item">
                       <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
-                        <span>{shortId(m.userId)[0].toUpperCase()}</span>
+                        <span>{nick[0].toUpperCase()}</span>
                         <span className={`member-dot ${isOnline ? "online" : ""}`} />
                       </div>
                       <div className="member-name" style={{ color: nickColor(m.userId) }}>
-                        {shortId(m.userId)}
+                        {nick}
                       </div>
                     </div>
                   );

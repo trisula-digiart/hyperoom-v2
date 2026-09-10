@@ -143,6 +143,24 @@ export async function getMemberRole(roomId: string, userId: string): Promise<Roo
   return r.rows[0] ? (r.rows[0].role as RoomRole) : null;
 }
 
+async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {
+  const r = await pools.core.query(
+    `SELECT m.room_id, m.user_id, m.role, m.joined_at, u.username, u.display_name
+     FROM public.room_members m
+     JOIN public.users u ON u.id = m.user_id
+     WHERE m.room_id = $1 ORDER BY m.joined_at`,
+    [roomId]
+  );
+  return r.rows.map((x) => ({
+    roomId: x.room_id,
+    userId: x.user_id,
+    role: x.role as RoomRole,
+    joinedAt: x.joined_at,
+    username: x.username,
+    displayName: x.display_name,
+  }));
+}
+
 export async function listRoomMembers(roomId: string): Promise<RoomMember[]> {
   const r = await pools.core.query<{ room_id: string; user_id: string; role: string; joined_at: string }>(
     `SELECT room_id, user_id, role, joined_at FROM public.room_members WHERE room_id = $1 ORDER BY joined_at`,
@@ -150,6 +168,8 @@ export async function listRoomMembers(roomId: string): Promise<RoomMember[]> {
   );
   return r.rows.map((x) => ({ roomId: x.room_id, userId: x.user_id, role: x.role as RoomRole, joinedAt: x.joined_at }));
 }
+
+export { listRoomMembersDetailed };
 
 // ---------- MESSAGES (chat) ----------
 
