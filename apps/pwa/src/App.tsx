@@ -66,7 +66,7 @@ function BootLoader() {
     </div>
   );
 }
-function AuthScreen() {
+function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [d, setD] = useState("");
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ function AuthScreen() {
     const tok = getToken();
     if (!tok) { setChecking(false); return; }
     api<{ user: Profile }>("GET", "/api/me").then((r) => {
-      setUser(r.user); window.location.reload();
+      setUser(r.user); onAuthed(r.user);
     }).catch(() => { setChecking(false); });
   }, []);
 
@@ -85,9 +85,8 @@ function AuthScreen() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(""); setLoading(true);
     try {
-      if (mode === "signup") await signup(u, p, d || u);
-      else await login(u, p);
-      window.location.reload();
+      const user = mode === "signup" ? await signup(u, p, d || u) : await login(u, p);
+      onAuthed(user);
     } catch (err) { setErr(String((err as Error).message)); setLoading(false); }
   };
 
@@ -139,16 +138,17 @@ export default function App() {
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // fetch rooms
-  const fetchRooms = useCallback(async () => {
-    try {
-      const r = await api<{ rooms: Room[] }>("GET", "/api/rooms");
+  // fetch rooms once logged in
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => {
+      if (cancelled) return;
       setRooms(r.rooms);
-      if (!activeRoom && r.rooms.length > 0) { setActiveRoom(r.rooms[0]); }
-    } catch {}
-  }, [activeRoom]);
-
-  useEffect(() => { fetchRooms(); }, []);
+      setActiveRoom(prev => prev ?? r.rooms[0] ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
 
   // fetch messages + members when room changes
   useEffect(() => {
@@ -244,7 +244,7 @@ export default function App() {
         return;
       }
       if (cmd === "/topic" && activeRoom.ownerId === user?.id) {
-        try { await api("PATCH", `/api/rooms/${activeRoom.id}`, { topic: rest }); fetchRooms(); }
+        try { await api("PATCH", `/api/rooms/${activeRoom.id}`, { topic: rest }); setActiveRoom(r2 => r2 && { ...r2, topic: rest }); }
         catch {}
         return;
       }
@@ -280,9 +280,9 @@ export default function App() {
     } catch (err) { alert((err as Error).message); }
   };
 
-  const handleLogout = () => { logout(); window.location.reload(); };
+  const handleLogout = () => { logout(); setSUser(null); };
 
-  if (!user) return <AuthScreen />;
+  if (!user) return <AuthScreen onAuthed={setSUser} />;
 
   return (
     <div className="app">
