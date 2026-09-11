@@ -5,7 +5,7 @@ import "./App.css";
 
 // --- Types ---
 interface Profile { id: string; username: string; displayName?: string; createdAt: string }
-interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string }
+interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string; isLobby?: boolean }
 interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null }
 interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null; authorName?: string }
 interface Presence { userId: string; status: string }
@@ -165,14 +165,20 @@ export default function App() {
     api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => {
       if (cancelled) return;
       setRooms(r.rooms);
-      setActiveRoom(prev => prev ?? r.rooms[0] ?? null);
+      setActiveRoom(prev => prev ?? r.rooms.find(x => x.isLobby) ?? r.rooms[0] ?? null);
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [user]);
 
   // fetch messages + members when room changes (auto-join public)
+  const prevRoomRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeRoom) return;
+    // unsubscribe dari room sebelumnya di WS
+    if (prevRoomRef.current && prevRoomRef.current !== activeRoom.id) {
+      wsSend({ type: "room:leave", roomId: prevRoomRef.current });
+    }
+    prevRoomRef.current = activeRoom.id;
     // Ensure membership (public rooms auto-join)
     api("POST", `/api/rooms/${activeRoom.id}/join`).catch(() => {});
     api<{ messages: Message[] }>("GET", `/api/rooms/${activeRoom.id}/messages`).then(r => setMessages(r.messages)).catch(() => setMessages([]));
@@ -322,8 +328,12 @@ export default function App() {
     if (!activeRoom) return;
     try {
       await api("POST", `/api/rooms/${activeRoom.id}/leave`);
-      setActiveRoom(null);
-      api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => setRooms(r.rooms));
+      // pindah ke lobby (landasan) bukan null
+      const roomsAfter = await api<{ rooms: Room[] }>("GET", "/api/rooms");
+      setRooms(roomsAfter.rooms);
+      setActiveRoom(roomsAfter.rooms.find(x => x.isLobby) ?? roomsAfter.rooms[0] ?? null);
+      setMessages([]);
+      setMembers([]);
     } catch (err) { alert((err as Error).message); }
   };
 
@@ -400,9 +410,9 @@ export default function App() {
           <div className="room-list">
             {rooms.map(r => (
               <div key={r.id}
-                className={`room-item ${activeRoom?.id === r.id ? "active" : ""}`}
+                className={`room-item ${activeRoom?.id === r.id ? "active" : ""} ${r.isLobby ? "room-lobby" : ""}`}
                 onClick={() => openRoom(r)}>
-                <span className="room-hash">#</span>{r.name.slice(1)}
+                <span className="room-hash">{r.isLobby ? "🏠" : "#"}</span>{r.name.slice(1)}
                 {(r.type === "private" || r.isLocked) && <span className="room-lock-icon">🔒</span>}
               </div>
             ))}
@@ -427,7 +437,8 @@ export default function App() {
         <div className="main-header">
           <div className="main-header-left">
             <span className="header-hash">#</span>
-            <span className="header-room">{activeRoom?.name?.slice(1) || "pilih ruangan"}</span>
+            <span className={`header-room ${activeRoom?.isLobby ? "header-lobby" : ""}`}>{activeRoom?.name?.slice(1) || "pilih ruangan"}</span>
+            {activeRoom?.isLobby && <span className="lobby-badge">🏠 LOBY</span>}
             {activeRoom?.topic && <span className="header-topic">{activeRoom.topic}</span>}
             {activeRoom?.isLocked && <span className="lock-badge">🔒</span>}
           </div>
@@ -443,7 +454,21 @@ export default function App() {
         </div>
 
         <div className="messages">
-          {messages.length === 0 && (
+          {messages.length === 0 && activeRoom?.isLobby && (
+            <div className="lobby-welcome">
+              <div className="lobby-icon">🏠</div>
+              <h2>Selamat datang di {activeRoom.name.replace("#","")}!</h2>
+              <p>Ayo ngobrol seru, ilmu dapet, temen dapet, gebetan dapet ❤️</p>
+              <div className="lobby-guide">
+                <div className="guide-item"><span>📌</span><div><b>Gabung room</b> — klik room di sebelah kiri (🔒 = privat, butuh password/undangan)</div></div>
+                <div className="guide-item"><span>✚</span><div><b>Buat room</b> — klik ＋ di samping SALURAN, isi nama/status/password</div></div>
+                <div className="guide-item"><span>⌨️</span><div><b>Command</b> — ketik <code>/help</code> untuk semua perintah (join, nick, me, topic, whois)</div></div>
+                <div className="guide-item"><span>👤</span><div><b>Profil</b> — klik user di daftar ANGGOTA untuk lihat profil & kirim pesan</div></div>
+              </div>
+              <div className="lobby-tip">💡 Kirim pesan pertama di sini buat nyapa semua orang!</div>
+            </div>
+          )}
+          {messages.length === 0 && !activeRoom?.isLobby && (
             <div className="messages-empty">
               <div className="empty-icon">💬</div>
               <div>Belum ada pesan</div>

@@ -17,7 +17,7 @@ import {
   insertMessage, listMessages, editMessage, deleteMessage, findMessage,
   setPresence, getPresence, touchUserSeen,
   getRoomPasswordHash, createInvite, hasInvite, consumeInvite,
-  setAvatar, getAvatarPath,
+  setAvatar, getAvatarPath, findLobbyRoom, autoJoinLobby,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 import { parseCommandLine, executeCommand } from "./commands.js";
@@ -124,6 +124,14 @@ app.post("/api/auth/signup", async (req, res) => {
 
     const hash = await hashPassword(password);
     const profile = await createUser(username, hash, displayName, phone);
+    // auto-join lobby room untuk user baru
+    const lobby = await autoJoinLobby(profile.id);
+    if (lobby) {
+      const nick = profile.displayName || profile.username || "someone";
+      const sysMsg = await insertMessage(lobby.id, profile.id, `*** ${nick} has joined ${lobby.name}`, "system");
+      realtime.broadcastToRoom(lobby.id, { type: "room:join", roomId: lobby.id, member: { roomId: lobby.id, userId: profile.id, role: "member", joinedAt: new Date().toISOString() } });
+      realtime.broadcastToRoom(lobby.id, { type: "message:new", message: sysMsg });
+    }
     const token = signToken({ id: profile.id, username: profile.username, displayName: profile.displayName ?? null, avatarUrl: profile.avatarUrl ?? null, platformRole: profile.platformRole });
     res.status(201).json({ token, user: { id: profile.id, username: profile.username, displayName: profile.displayName ?? undefined, platformRole: profile.platformRole, createdAt: profile.createdAt } });
   } catch (err) {
@@ -139,6 +147,8 @@ app.post("/api/auth/login", async (req, res) => {
   const ok = await verifyPassword(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: "nickname atau password salah" });
   await pools.core.query(`UPDATE public.users SET last_seen_at = now() WHERE id = $1`, [user.id]);
+  // auto-join lobby (semua user yang login selalu di room utama)
+  await autoJoinLobby(user.id);
   const token = signToken({ id: user.id, username: user.username, displayName: user.display_name, avatarUrl: user.avatar_url, platformRole: user.platform_role });
   res.json({ token, user: { id: user.id, username: user.username, displayName: user.display_name ?? undefined, avatarUrl: user.avatar_url ?? undefined, platformRole: user.platform_role, createdAt: user.created_at } });
 });

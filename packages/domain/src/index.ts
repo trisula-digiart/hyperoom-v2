@@ -24,6 +24,7 @@ export interface Room {
   ownerId: string;
   topic?: string;
   isLocked: boolean;
+  isLobby?: boolean;
   createdAt: string;
 }
 

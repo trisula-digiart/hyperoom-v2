@@ -101,6 +101,7 @@ interface RoomRow {
   is_locked: boolean;
   owner_id: string;
   password_hash: string | null;
+  is_lobby: boolean;
   created_at: string;
 }
 
@@ -112,6 +113,7 @@ function rowToRoom(r: RoomRow): Room {
     topic: r.topic ?? undefined,
     isLocked: r.is_locked,
     ownerId: r.owner_id,
+    isLobby: r.is_lobby,
     createdAt: r.created_at,
   };
 }
@@ -144,7 +146,7 @@ export async function listRoomsForUser(userId: string): Promise<Room[]> {
     `SELECT r.* FROM public.rooms r
      LEFT JOIN public.room_members m ON m.room_id = r.id AND m.user_id = $1
      WHERE r.type = 'public' OR m.user_id IS NOT NULL
-     ORDER BY r.name`,
+     ORDER BY r.is_lobby DESC, r.name`,
     [userId]
   );
   return r.rows.map(rowToRoom);
@@ -158,6 +160,18 @@ export async function findRoomById(id: string): Promise<Room | null> {
 export async function findRoomByName(name: string): Promise<Room | null> {
   const r = await pools.core.query<RoomRow>(`SELECT * FROM public.rooms WHERE name = $1`, [name]);
   return r.rows[0] ? rowToRoom(r.rows[0]) : null;
+}
+
+export async function findLobbyRoom(): Promise<Room | null> {
+  const r = await pools.core.query<RoomRow>(`SELECT * FROM public.rooms WHERE is_lobby = true LIMIT 1`);
+  return r.rows[0] ? rowToRoom(r.rows[0]) : null;
+}
+
+export async function autoJoinLobby(userId: string): Promise<Room | null> {
+  const lobby = await findLobbyRoom();
+  if (!lobby) return null;
+  await joinRoom(lobby.id, userId);
+  return lobby;
 }
 
 export async function joinRoom(roomId: string, userId: string): Promise<RoomMember> {
