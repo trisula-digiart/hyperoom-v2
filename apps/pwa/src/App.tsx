@@ -894,6 +894,67 @@ export default function App() {
             {unreadCount > 0 && <span className="mn-badge">{unreadCount}</span>}
           </button>
         </nav>
+
+        {/* Modal profil — mobile juga */}
+        {profileUser && (
+          <div className="modal-overlay" onClick={() => setProfileUser(null)}>
+            <div className="modal profile-modal" onClick={e => e.stopPropagation()}>
+              <div className="profile-head">
+                {profileUser.avatarUrl
+                  ? <img src={resolveUrl(profileUser.avatarUrl)} alt="avatar" className="profile-avatar" />
+                  : <div className="profile-avatar profile-avatar-ph" style={{ background: nickColor(profileUser.id) }}>{profileUser.username[0].toUpperCase()}</div>
+                }
+                <div className="profile-head-info">
+                  <h3>{profileUser.displayName || profileUser.username}</h3>
+                  <div className="profile-username">@{profileUser.username}</div>
+                  {profileUser.platformRole && <span className="profile-role">{profileUser.platformRole}</span>}
+                  {editProfile && <button className="avatar-upload-btn" onClick={() => avatarInputRef.current?.click()}>📷 Ganti Avatar</button>}
+                  <input ref={avatarInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+                </div>
+              </div>
+              {editProfile ? (
+                <div className="profile-edit">
+                  <label>Nama Tampilan<input value={editName} onChange={e => setEditName(e.target.value)} /></label>
+                  <label>Bio<input value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Cerita dikit tentang lo…" /></label>
+                  <label>Status<input value={editStatus} onChange={e => setEditStatus(e.target.value)} placeholder="Lagi apa?" /></label>
+                  <div className="modal-actions">
+                    <button className="btn-ghost" onClick={() => setEditProfile(false)}>Batal</button>
+                    <button className="btn-primary" onClick={saveProfile}>Simpan</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="profile-body">
+                    <div className="profile-row"><span>Bio</span><span>{profileUser.bio || "—"}</span></div>
+                    <div className="profile-row"><span>Status</span><span>{profileUser.status || "—"}</span></div>
+                    <div className="profile-row"><span>Gabung</span><span>{fmtTime(profileUser.createdAt)}</span></div>
+                  </div>
+                  <div className="profile-actions">
+                    {profileUser.id === user?.id && (
+                      <>
+                        <button className="btn-primary" onClick={openEditProfile}>✏️ Edit Profil</button>
+                        <button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button>
+                      </>
+                    )}
+                    {profileUser.id !== user?.id && (
+                      <>
+                        <button className="btn-primary btn-dm" onClick={() => { openDm(profileUser.username); setProfileUser(null); }}>💬 Pesan</button>
+                        {user?.id === activeRoom?.ownerId && (
+                          <>
+                            <button className="btn-primary btn-promote" onClick={() => { doMod("op", profileUser.username); setProfileUser(null); }}>⬆️ Promote</button>
+                            <button className="btn-danger" onClick={() => { doMod("kick", profileUser.username); setProfileUser(null); }}>❌ Kick</button>
+                            <button className="btn-danger" onClick={() => { doMod("mute", profileUser.username); setProfileUser(null); }}>🔇 Mute</button>
+                          </>
+                        )}
+                        <button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
