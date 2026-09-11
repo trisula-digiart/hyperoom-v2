@@ -227,6 +227,7 @@ export default function App() {
   const [inviteMsg, setInviteMsg] = useState("");
   const [expandGlobal, setExpandGlobal] = useState(true);
   const [expandRoom, setExpandRoom] = useState(true);
+  const [mobileTab, setMobileTab] = useState<"chat" | "members" | "dm">("chat"); // mobile bottom nav
   const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
   const [unread, setUnread] = useState<Record<string, number>>({});
@@ -657,13 +658,14 @@ export default function App() {
   };
 
   const isProfileSelf = profileUser && user && profileUser.id === user?.id;
+  const unreadCount = Object.values(unread).reduce((a, b) => a + b, 0); // total unread buat badge nav
 
   if (!user) return <AuthScreen onAuthed={setSUser} />;
 
   return (
     <div className="app">
-      {/* ---- LEFT SIDEBAR ---- */}
-      <aside className="sidebar-left">
+      {/* ---- LEFT SIDEBAR (mobile: jadi drawer/tab chat) ---- */}
+      <aside className={`sidebar-left ${mobileTab === "members" ? "mobile-hidden" : ""}`}>
         <div className="sidebar-logo">
           <img src="/logo.png" alt="Hyperoom" className="sidebar-logo-img" />
           <span className="ws-dot" data-on={wsConnected} title={wsConnected ? "connected" : "disconnected"} />
@@ -719,8 +721,8 @@ export default function App() {
         </div>
       </aside>
 
-      {/* ---- CENTER ---- */}
-      <main className="main-panel">
+      {/* ---- CENTER (mobile: hidden saat tab members) ---- */}
+      <main className={`main-panel ${mobileTab === "members" ? "mobile-hidden" : ""}`}>
         <div className="main-header">
           <div className="main-header-left">
             <span className="header-hash">#</span>
@@ -855,8 +857,8 @@ export default function App() {
         </form>
       </main>
 
-      {/* ---- RIGHT SIDEBAR ---- */}
-      <aside className="sidebar-right">
+      {/* ---- RIGHT SIDEBAR (mobile: tab members) ---- */}
+      <aside className={`sidebar-right ${mobileTab !== "members" ? "mobile-hidden" : ""}`}>
         <div className="member-list">
           {/* Anggota Hyperoom — semua user online (global) */}
           <div className="member-group">
@@ -1067,6 +1069,58 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ---- MOBILE DM PANEL (tab dm) ---- */}
+      {mobileTab === "dm" && (
+        <main className="main-panel dm-panel">
+          <div className="dm-header">
+            <span className="dm-title">💌 Pesan Pribadi</span>
+            <button className="btn-link" onClick={() => { setProfileUser(null); alert("Klik user di tab Anggota untuk buka DM"); }}>Cara DM?</button>
+          </div>
+          <div className="dm-list">
+            {rooms.filter(r => r.type === "dm").map(r => (
+              <div key={r.id} className="dm-item" onClick={() => { setActiveRoom(r); setMobileTab("chat"); }}>
+                <div className="dm-avatar">💬</div>
+                <div className="dm-name">{r.name.replace("#dm-", "").slice(0, 20)}</div>
+                {unread[r.id] > 0 && <span className="mn-badge">{unread[r.id]}</span>}
+              </div>
+            ))}
+            {rooms.filter(r => r.type === "dm").length === 0 && (
+              <div className="dm-empty">
+                <div className="empty-icon">💌</div>
+                <div>Belum ada pesan pribadi</div>
+                <div className="empty-sub">Buka profil user di tab Anggota → klik 💬 Pesan</div>
+              </div>
+            )}
+          </div>
+        </main>
+      )}
+
+      {/* ---- MOBILE BOTTOM NAV ---- */}
+      <nav className="mobile-nav">
+        <button
+          className={`mobile-nav-item ${mobileTab === "chat" ? "active" : ""}`}
+          onClick={() => setMobileTab("chat")}
+        >
+          <span className="mn-icon">💬</span>
+          <span className="mn-label">Chat</span>
+          {unreadCount > 0 && <span className="mn-badge">{unreadCount}</span>}
+        </button>
+        <button
+          className={`mobile-nav-item ${mobileTab === "members" ? "active" : ""}`}
+          onClick={() => setMobileTab("members")}
+        >
+          <span className="mn-icon">👥</span>
+          <span className="mn-label">Anggota</span>
+        </button>
+        <button
+          className={`mobile-nav-item ${mobileTab === "dm" ? "active" : ""}`}
+          onClick={() => setMobileTab("dm")}
+        >
+          <span className="mn-icon">💌</span>
+          <span className="mn-label">DM</span>
+        </button>
+      </nav>
     </div>
   );
 }
