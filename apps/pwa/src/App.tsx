@@ -4,7 +4,7 @@ import { useRealtime, type WsEvent } from "./useRealtime";
 import "./App.css";
 
 // --- Types ---
-interface Profile { id: string; username: string; displayName?: string; createdAt: string }
+interface Profile { id: string; username: string; displayName?: string; createdAt?: string }
 interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string; isLobby?: boolean }
 interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null; avatarUrl?: string | null }
 interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null; authorName?: string }
@@ -154,13 +154,11 @@ export default function App() {
   const [joinPassword, setJoinPassword] = useState("");
   const [joinError, setJoinError] = useState("");
   const [profileUser, setProfileUser] = useState<any>(null);
-  const [profileError, setProfileError] = useState("");
   const [inviteModal, setInviteModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [inviteMsg, setInviteMsg] = useState("");
   const [expandGlobal, setExpandGlobal] = useState(true);
   const [expandRoom, setExpandRoom] = useState(true);
-  const [modTarget, setModTarget] = useState<any>(null);   // moderation menu target
   const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
   const [unread, setUnread] = useState<Record<string, number>>({});
@@ -403,7 +401,7 @@ export default function App() {
         if (res.reply) {
           setMessages(prev => [...prev, {
             id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
-            kind: "system", content: res.reply,
+            kind: "system", content: res.reply ?? "",
             createdAt: new Date().toISOString()
           }]);
         }
@@ -499,8 +497,8 @@ export default function App() {
   const fetchProfile = async (userId: string) => {
     try {
       const r = await api<{ user: any }>("GET", `/api/users/${userId}`);
-      setProfileUser(r.user); setProfileError("");
-    } catch (err) { setProfileError((err as Error).message); setProfileUser(null); }
+      setProfileUser(r.user);
+    } catch (err) { setProfileUser(null); alert((err as Error).message); }
   };
 
   const fetchOnlineUsers = async () => {
@@ -526,7 +524,6 @@ export default function App() {
     if (!activeRoom) return;
     try {
       const r = await api<{ message: string }>("POST", `/api/rooms/${activeRoom.id}/mod/${action}`, { username });
-      setModTarget(null);
       api<{ members: Member[] }>("GET", `/api/rooms/${activeRoom.id}/members`).then(x => setMembers(x.members)).catch(() => {});
       alert(r.message);
     } catch (err) { alert((err as Error).message); }

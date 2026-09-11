@@ -1,6 +1,6 @@
 // API client + auth token storage
-
-const BASE = ""; // same origin via proxy
+// BASE dari env (build-time) — kalau kosong, same-origin (dev/localhost)
+const BASE = (import.meta as any).env?.VITE_API_BASE || "";
 
 let token: string | null = localStorage.getItem("h2_token");
 let user: { id: string; username: string; displayName?: string } | null = null;

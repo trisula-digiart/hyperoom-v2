@@ -13,6 +13,8 @@ export type WsEvent =
   | { type: "presence:update"; presence: { userId: string; status: string; lastSeenAt: string } }
   | { type: "typing:start"; roomId: string; userId: string }
   | { type: "typing:stop"; roomId: string; userId: string }
+  | { type: "reaction:add"; reaction: { messageId: string; userId: string; emoji: string; createdAt: string } }
+  | { type: "reaction:remove"; messageId: string; userId: string; emoji: string }
   | { type: "error"; code: string; message: string };
 
 interface UseRealtimeOpts {
@@ -23,7 +25,7 @@ interface UseRealtimeOpts {
 
 export function useRealtime({ onEvent, onOpen, onClose }: UseRealtimeOpts) {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEventRef = useRef(onEvent);
   const onOpenRef = useRef(onOpen);
   const onCloseRef = useRef(onClose);
@@ -35,8 +37,17 @@ export function useRealtime({ onEvent, onOpen, onClose }: UseRealtimeOpts) {
   const connect = useCallback(() => {
     const tok = getToken();
     if (!tok) return;
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/realtime?token=${tok}`);
+    const base = (import.meta as any).env?.VITE_API_BASE || "";
+    let wsHost: string;
+    if (base) {
+      // backend terpisah (Vercel → tunnel/LAN)
+      const u = new URL(base);
+      wsHost = u.protocol === "https:" ? `wss://${u.host}` : `ws://${u.host}`;
+    } else {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      wsHost = `${proto}//${location.host}`;
+    }
+    const ws = new WebSocket(`${wsHost}/realtime?token=${tok}`);
     wsRef.current = ws;
 
     ws.onopen = () => { onOpenRef.current?.(); };
@@ -53,7 +64,8 @@ export function useRealtime({ onEvent, onOpen, onClose }: UseRealtimeOpts) {
   useEffect(() => {
     connect();
     return () => {
-      clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
       const ws = wsRef.current;
       wsRef.current = null;
       // close only if already open; a CONNECTING socket closing mid-handshake
