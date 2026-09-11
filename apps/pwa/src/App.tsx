@@ -229,7 +229,7 @@ export default function App() {
   const [expandRoom, setExpandRoom] = useState(true);
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
   const [dmPartners, setDmPartners] = useState<Record<string, { id: string; username: string; displayName: string | null }>>({});
-  const [mobileTab, setMobileTab] = useState<"chat" | "rooms" | "members" | "dm">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "rooms" | "members" | "dm" | "profile">("chat");
   const [isMobile, setIsMobile] = useState(false);
   const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
@@ -889,7 +889,39 @@ export default function App() {
           </main>
         )}
 
-        {/* Bottom nav 4 tab */}
+        {mobileTab === "profile" && (
+          <div className="mobile-tab-content">
+            <div className="mobile-tab-title">👤 Profil Saya</div>
+            <div className="mprofile-card">
+              <div className="mprofile-head">
+                {myAvatarUrl
+                  ? <img src={resolveUrl(myAvatarUrl)} alt="avatar" className="mprofile-avatar" onError={(e) => { (e.target as HTMLImageElement).src = "/logo.png"; }} />
+                  : <div className="mprofile-avatar mprofile-avatar-ph" style={{ background: nickColor(user?.id || "") }}>{(user?.displayName || user?.username || "?")[0].toUpperCase()}</div>
+                }
+                <div className="mprofile-info">
+                  <div className="mprofile-name">{user?.displayName || user?.username}</div>
+                  <div className="mprofile-username">@{user?.username}</div>
+                </div>
+              </div>
+              <button className="btn-primary btn-block" onClick={async () => {
+                try {
+                  const r = await api<{ user: any }>("GET", `/api/users/${user!.id}`);
+                  setProfileUser(r.user);
+                  setEditBio(r.user.bio || "");
+                  setEditStatus(r.user.status || "");
+                  setEditName(r.user.displayName || r.user.username || "");
+                  setEditProfile(true);
+                } catch {
+                  setProfileUser({ id: user!.id, username: user!.username, displayName: user!.displayName });
+                  setEditProfile(true);
+                }
+              }}>✏️ Edit Profil</button>
+              <button className="btn-logout btn-block" onClick={handleLogout}>🚪 Logout</button>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom nav 5 tab */}
         <nav className="mobile-nav">
           <button className={`mobile-nav-item ${mobileTab === "chat" ? "active" : ""}`} onClick={() => setMobileTab("chat")}>
             <span className="mn-icon">💬</span><span className="mn-label">Chat</span>
@@ -903,6 +935,9 @@ export default function App() {
           <button className={`mobile-nav-item ${mobileTab === "dm" ? "active" : ""}`} onClick={() => setMobileTab("dm")}>
             <span className="mn-icon">💌</span><span className="mn-label">DM</span>
             {unreadCount > 0 && <span className="mn-badge">{unreadCount}</span>}
+          </button>
+          <button className={`mobile-nav-item ${mobileTab === "profile" ? "active" : ""}`} onClick={() => setMobileTab("profile")}>
+            <span className="mn-icon">👤</span><span className="mn-label">Profil</span>
           </button>
         </nav>
 
