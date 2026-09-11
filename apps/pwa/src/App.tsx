@@ -164,6 +164,13 @@ export default function App() {
   const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [ignoreList, setIgnoreList] = useState<string[]>([]); // user IDs di-ignore
+  const [msgMenu, setMsgMenu] = useState<string | null>(null); // edit/delete menu pesan
+  const [editProfile, setEditProfile] = useState(false);
+  const [editBio, setEditBio] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editName, setEditName] = useState("");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const activeRoomRef = useRef<string | null>(null);
   useEffect(() => { activeRoomRef.current = activeRoom?.id || null; }, [activeRoom]);
   const userRef = useRef(user);
@@ -212,13 +219,71 @@ export default function App() {
   // scroll to bottom on new message
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // poll online users (global directory) every 10s
-  useEffect(() => {
-    if (!user) return;
-    fetchOnlineUsers();
-    const iv = setInterval(fetchOnlineUsers, 10000);
-    return () => clearInterval(iv);
-  }, [user, activeRoom]);
+  // fetch online users (global directory) every 10s
+    useEffect(() => {
+      if (!user) return;
+      fetchOnlineUsers();
+      const iv = setInterval(fetchOnlineUsers, 10000);
+      return () => clearInterval(iv);
+    }, [user, activeRoom]);
+
+    // fetch ignore list saat login
+    useEffect(() => {
+      if (!user) return;
+      api<{ ignoredUserIds: string[] }>("GET", "/api/me/ignores").then(r => setIgnoreList(r.ignoredUserIds)).catch(() => {});
+    }, [user]);
+
+    // edit/delete message
+    const editMessage = async (msgId: string) => {
+      const newContent = prompt("Edit pesan:");
+      if (!newContent || !newContent.trim()) { setMsgMenu(null); return; }
+      try {
+        await api("PATCH", `/api/messages/${msgId}`, { content: newContent.trim() });
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: newContent.trim() } : m));
+      } catch (err) { alert((err as Error).message); }
+      setMsgMenu(null);
+    };
+    const deleteMessage = async (msgId: string) => {
+      if (!confirm("Hapus pesan ini?")) { setMsgMenu(null); return; }
+      try {
+        await api("DELETE", `/api/messages/${msgId}`);
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      } catch (err) { alert((err as Error).message); }
+      setMsgMenu(null);
+    };
+
+    // edit profile
+    const openEditProfile = () => {
+      setEditBio(profileUser?.bio || "");
+      setEditStatus(profileUser?.status || "");
+      setEditName(profileUser?.displayName || profileUser?.username || "");
+      setEditProfile(true);
+    };
+    const saveProfile = async () => {
+      try {
+        await api("PATCH", "/api/users/me", { displayName: editName, bio: editBio, status: editStatus });
+        setProfileUser({ ...profileUser, displayName: editName, bio: editBio, status: editStatus });
+        setEditProfile(false);
+        setUser({ ...user!, displayName: editName });
+        api<{ user: any }>("GET", "/api/me").then(r => setUser(r.user)).catch(() => {});
+      } catch (err) { alert((err as Error).message); }
+    };
+    const uploadAvatar = async (file: File) => {
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("avatar", file);
+      try {
+        const tok = getToken();
+        const r = await fetch("/api/users/me/avatar", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${tok}` },
+          body: fd,
+        }).then(r => r.json());
+        if (!r.ok && r.error) throw new Error(r.error);
+        if (r.ok === false) throw new Error(r.error);
+        setProfileUser({ ...profileUser, avatarUrl: r.avatarUrl });
+      } catch (err) { alert((err as Error).message); }
+    };
 
   // real browser notification (mention/PM/room lain) + sound
   const notifyReal = (msg: any) => {
@@ -640,7 +705,7 @@ export default function App() {
               <div className="empty-sub">Kirim pesan pertama di #{activeRoom?.name?.slice(1) || "…"}</div>
             </div>
           )}
-          {messages.map(msg => {
+          {messages.filter(m => !ignoreList.includes(m.authorId)).map(msg => {
             const isAction = msg.kind === "action";
             const isSystem = msg.kind === "system";
             const isMine = msg.authorId === user?.id;
@@ -655,26 +720,39 @@ export default function App() {
               grouped[r.emoji].count++;
               if (r.userId === user?.id) grouped[r.emoji].mine = true;
             }
+            // mention highlight: @username jadi span
+            const renderContent = (text: string) => {
+              const parts = text.split(/(@[a-zA-Z0-9_]{2,20})/g);
+              return parts.map((p, i) => p.startsWith("@") && p.length > 2
+                ? <span key={i} className="mention">{p}</span>
+                : <span key={i}>{p}</span>);
+            };
             return (
-              <div key={msg.id} className={`msg ${isAction ? "msg-action" : ""} ${isMine ? "msg-mine" : "msg-theirs"}`}>
+              <div key={msg.id} className={`msg ${isAction ? "msg-action" : ""} ${isMine ? "msg-mine" : "msg-theirs"}`} onClick={() => isMine && setMsgMenu(msgMenu === msg.id ? null : msg.id)}>
                 <span className="msg-time">{fmtTime(msg.createdAt)}</span>
                 <span className="msg-nick" style={{ color: nickColor(msg.authorId) }}>
                   {msg.authorName || shortId(msg.authorId)}
                 </span>
-                <span className="msg-body">{isAction ? ` ${msg.content}` : msg.content}</span>
+                <span className="msg-body">{isAction ? <span> {renderContent(msg.content)}</span> : renderContent(msg.content)}</span>
+                {msgMenu === msg.id && isMine && (
+                  <div className="msg-menu">
+                    <button className="msg-menu-item" onClick={(e) => { e.stopPropagation(); editMessage(msg.id); }}>✏️ Edit</button>
+                    <button className="msg-menu-item danger" onClick={(e) => { e.stopPropagation(); deleteMessage(msg.id); }}>🗑 Hapus</button>
+                  </div>
+                )}
                 <div className="msg-reactions">
                   {Object.values(grouped).map(g => (
                     <button key={g.emoji}
                       className={`reaction-btn ${g.mine ? "reaction-mine" : ""}`}
-                      onClick={() => toggleReaction(msg.id, g.emoji)}
+                      onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, g.emoji); }}
                     >{g.emoji} {g.count > 1 ? g.count : ""}</button>
                   ))}
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "👍")} title="👍">👍</button>
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "❤️")} title="❤️">❤️</button>
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😂")} title="😂">😂</button>
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😮")} title="😮">😮</button>
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😢")} title="😢">😢</button>
-                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😡")} title="😡">😡</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "👍"); }}>👍</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "❤️"); }}>❤️</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "😂"); }}>😂</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "😮"); }}>😮</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "😢"); }}>😢</button>
+                  <button className="reaction-add" onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "😡"); }}>😡</button>
                 </div>
               </div>
             );
@@ -859,42 +937,61 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setProfileUser(null)}>
           <div className="modal profile-modal" onClick={e => e.stopPropagation()}>
             <div className="profile-head">
-              {profileUser.avatarUrl
-                ? <img src={profileUser.avatarUrl} alt="avatar" className="profile-avatar" />
-                : <div className="profile-avatar profile-avatar-ph" style={{ background: nickColor(profileUser.id) }}>{profileUser.username[0].toUpperCase()}</div>
-              }
-              <div>
-                <h3>{profileUser.displayName || profileUser.username}</h3>
-                <div className="profile-username">@{profileUser.username}</div>
-                {profileUser.platformRole && <span className="profile-role">{profileUser.platformRole}</span>}
+                {profileUser.avatarUrl
+                  ? <img src={profileUser.avatarUrl} alt="avatar" className="profile-avatar" />
+                  : <div className="profile-avatar profile-avatar-ph" style={{ background: nickColor(profileUser.id) }}>{profileUser.username[0].toUpperCase()}</div>
+                }
+                <div className="profile-head-info">
+                  <h3>{profileUser.displayName || profileUser.username}</h3>
+                  <div className="profile-username">@{profileUser.username}</div>
+                  {profileUser.platformRole && <span className="profile-role">{profileUser.platformRole}</span>}
+                  {isProfileSelf && editProfile && <button className="avatar-upload-btn" onClick={() => avatarInputRef.current?.click()}>📷 Ganti Avatar</button>}
+                  <input ref={avatarInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) uploadAvatar(e.target.files[0]); }} />
+                </div>
               </div>
-            </div>
-            <div className="profile-body">
-              <div className="profile-row"><span>Bio</span><span>{profileUser.bio || "—"}</span></div>
-              <div className="profile-row"><span>Status</span><span>{profileUser.status || "—"}</span></div>
-              <div className="profile-row"><span>Gabung</span><span>{fmtTime(profileUser.createdAt)}</span></div>
-              {profileUser.rooms && profileUser.rooms.length > 0 && (
-                <div className="profile-row"><span>Room</span><span>{profileUser.rooms.map(r => `#${r.name.slice(1)} (${r.role})`).join(", ")}</span></div>
-              )}
-            </div>
-            <div className="profile-actions">
-              {!isProfileSelf && (
+              {editProfile ? (
+                <div className="profile-edit">
+                  <label>Nama Tampilan<input value={editName} onChange={e => setEditName(e.target.value)} /></label>
+                  <label>Bio<input value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Cerita dikit tentang lo…" /></label>
+                  <label>Status<input value={editStatus} onChange={e => setEditStatus(e.target.value)} placeholder="Lagi apa?" /></label>
+                  <div className="modal-actions">
+                    <button className="btn-ghost" onClick={() => setEditProfile(false)}>Batal</button>
+                    <button className="btn-primary" onClick={saveProfile}>Simpan</button>
+                  </div>
+                </div>
+              ) : (
                 <>
-                  <button className="btn-primary btn-dm" onClick={() => { openDm(profileUser.username); setProfileUser(null); }}>💬 Pesan</button>
-                  {user?.id === activeRoom?.ownerId && (
-                    <>
-                      <button className="btn-primary btn-promote" onClick={() => { doMod("op", profileUser.username); setProfileUser(null); }}>⬆️ Promote</button>
-                      <button className="btn-danger" onClick={() => { doMod("kick", profileUser.username); setProfileUser(null); }}>❌ Kick</button>
-                      <button className="btn-danger" onClick={() => { doMod("mute", profileUser.username); setProfileUser(null); }}>🔇 Mute</button>
-                    </>
-                  )}
+                  <div className="profile-body">
+                    <div className="profile-row"><span>Bio</span><span>{profileUser.bio || "—"}</span></div>
+                    <div className="profile-row"><span>Status</span><span>{profileUser.status || "—"}</span></div>
+                    <div className="profile-row"><span>Gabung</span><span>{fmtTime(profileUser.createdAt)}</span></div>
+                    {profileUser.rooms && profileUser.rooms.length > 0 && (
+                      <div className="profile-row"><span>Room</span><span>{profileUser.rooms.map((r: any) => `#${r.name.slice(1)} (${r.role})`).join(", ")}</span></div>
+                    )}
+                  </div>
+                  <div className="profile-actions">
+                    {!isProfileSelf && (
+                      <>
+                        <button className="btn-primary btn-dm" onClick={() => { openDm(profileUser.username); setProfileUser(null); }}>💬 Pesan</button>
+                        {user?.id === activeRoom?.ownerId && (
+                          <>
+                            <button className="btn-primary btn-promote" onClick={() => { doMod("op", profileUser.username); setProfileUser(null); }}>⬆️ Promote</button>
+                            <button className="btn-danger" onClick={() => { doMod("kick", profileUser.username); setProfileUser(null); }}>❌ Kick</button>
+                            <button className="btn-danger" onClick={() => { doMod("mute", profileUser.username); setProfileUser(null); }}>🔇 Mute</button>
+                          </>
+                        )}
+                      </>
+                    )}
+                    {isProfileSelf && (
+                      <>
+                        <button className="btn-primary" onClick={openEditProfile}>✏️ Edit Profil</button>
+                        <button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button>
+                      </>
+                    )}
+                  </div>
+                  {!isProfileSelf && <div className="modal-actions"><button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button></div>}
                 </>
               )}
-              {isProfileSelf && (
-                <button className="btn-primary" onClick={() => setProfileUser(null)}>Tutup</button>
-              )}
-            </div>
-            {!isProfileSelf && <div className="modal-actions"><button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button></div>}
           </div>
         </div>
       )}

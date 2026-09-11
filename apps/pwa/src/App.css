@@ -252,6 +252,16 @@ body { height: 100vh; overflow: hidden; }
 }
 .msg-theirs .msg-body { max-width: 70%; }
 .msg-body .mention { color: var(--accent); font-weight: 600; cursor: pointer; }
+.msg-menu {
+  display: flex; gap: 6px; margin-top: 4px;
+}
+.msg-menu-item {
+  font-size: 11px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--card); cursor: pointer;
+}
+.msg-menu-item:hover { background: var(--accent-light); }
+.msg-menu-item.danger { color: var(--error); border-color: rgba(239,68,68,0.3); }
+.msg-menu-item.danger:hover { background: #fef2f2; }
 .msg-time { font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
 .msg-nick { font-weight: 600; font-size: 13px; white-space: nowrap; }
 .msg-body { font-size: 14px; word-break: break-word; line-height: 1.5; }
@@ -405,7 +415,19 @@ body { height: 100vh; overflow: hidden; }
 .profile-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; }
 .profile-row span:first-child { color: var(--text-dim); font-weight: 600; flex-shrink: 0; }
 .profile-row span:last-child { text-align: right; word-break: break-word; }
-.profile-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.profile-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btn-danger { background: var(--error); color: #fff; border: none; border-radius: var(--radius); padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { background: #dc2626; }
+.btn-dm { background: var(--success) !important; }
+.btn-dm:hover { background: #16a34a !important; }
+.btn-promote { background: var(--purple) !important; }
+.btn-promote:hover { background: #6148a8 !important; }
+.avatar-upload-btn { display: block; margin-top: 6px; font-size: 11px; color: var(--accent); cursor: pointer; background: none; border: none; padding: 0; }
+.avatar-upload-btn:hover { text-decoration: underline; }
+.profile-edit { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.profile-edit label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); display: flex; flex-direction: column; gap: 4px; }
+.profile-edit input { padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; }
+.profile-edit input:focus { outline: none; border-color: var(--accent); }
 
 /* Spinner */
 .spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }

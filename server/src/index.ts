@@ -19,7 +19,7 @@ import {
   getRoomPasswordHash, createInvite, hasInvite, consumeInvite,
   setAvatar, getAvatarPath, findLobbyRoom, autoJoinLobby,
   setMemberRole, banUser, unbanUser, isBanned, muteUser, unmuteUser, isMuted,
-  findOrCreateDmRoom, addReaction, removeReaction, listReactions,
+  findOrCreateDmRoom, addReaction, removeReaction, listReactions, listIgnores,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 import { parseCommandLine, executeCommand } from "./commands.js";
@@ -170,6 +170,13 @@ app.patch("/api/me/nick", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ignore list user (untuk filter UI)
+app.get("/api/me/ignores", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const ids = await listIgnores(req2.userId);
+  res.json({ ignoredUserIds: ids });
+});
+
 // ---------- ROOMS ----------
 app.get("/api/rooms", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
@@ -201,6 +208,10 @@ app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
   const room = await findRoomById(req.params.id);
   if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
   const { password } = req.body || {};
+
+  // banned user tidak bisa join (enforcement nyata)
+  const banned = await isBanned(room.id, req2.userId);
+  if (banned) return res.status(403).json({ error: "kamu di-ban dari room ini" });
 
   // sudah member? langsung boleh
   const existingRole = await getMemberRole(room.id, req2.userId);
@@ -524,10 +535,14 @@ app.get("/api/rooms/:id/messages", requireAuth, async (req, res) => {
     [ids]
   );
   const nameMap = new Map(users.rows.map((u) => [u.id, u.display_name || u.username]));
-  const enriched = messages.map((m) => ({
-    ...m,
-    authorName: nameMap.get(m.authorId) || m.authorId.slice(0, 8),
-  }));
+  const enriched = messages.map((m) => {
+    const mentionMatch = m.content.match(/@([a-zA-Z0-9_]{2,20})/g) || [];
+    return {
+      ...m,
+      authorName: nameMap.get(m.authorId) || m.authorId.slice(0, 8),
+      mentions: mentionMatch.map(x => x.slice(1)).filter((v, i, a) => a.indexOf(v) === i),
+    };
+  });
   res.json({ messages: enriched });
 });
 
@@ -559,7 +574,10 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   }
   const message = await insertMessage(req.params.id, req2.userId, content.trim(), kind || "text", replyToMessageId);
   const author = await findUserById(req2.userId);
-  const msgWithName = { ...message, authorName: author?.display_name || author?.username || message.authorId.slice(0, 8) };
+  // detect mentions @username di content (real)
+  const mentionMatch = content.match(/@([a-zA-Z0-9_]{2,20})/g) || [];
+  const mentions = mentionMatch.map(m => m.slice(1)).filter((v, i, a) => a.indexOf(v) === i);
+  const msgWithName = { ...message, authorName: author?.display_name || author?.username || message.authorId.slice(0, 8), mentions };
   realtime.broadcastToRoom(message.roomId, { type: "message:new", message: msgWithName });
   res.status(201).json({ message: msgWithName });
 });
