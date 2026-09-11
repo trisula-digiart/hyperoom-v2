@@ -7,17 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["logo.png", "favicon.ico"],
+      injectRegister: "auto",
+      includeAssets: ["logo.png"],
       manifest: {
         name: "Hyperoom v2",
         short_name: "Hyperoom",
-        description: "Chat realtime ala mIRC modern — ngobrol seru, server rumah sendiri",
+        description: "Chat realtime — ngobrol seru, server rumah sendiri",
         theme_color: "#2563eb",
         background_color: "#f0f2f5",
         display: "standalone",
         start_url: "/",
         icons: [
-          { src: "/logo.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any" },
           { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
@@ -25,6 +25,16 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,jpg,svg,ico}"],
         navigateFallback: "/index.html",
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/(api|avatars|realtime)/,
+            handler: "NetworkOnly",
+          },
+        ],
       },
     }),
   ],
