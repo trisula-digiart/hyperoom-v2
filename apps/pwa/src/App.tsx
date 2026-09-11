@@ -763,7 +763,7 @@ export default function App() {
               </form>
             )}
             <div className="mobile-room-list">
-              {rooms.map(r => (
+              {rooms.filter(r => r.type !== "dm").map(r => (
                 <div key={r.id}
                   className={`mobile-room-item ${activeRoom?.id === r.id ? "active" : ""} ${r.isLobby ? "room-lobby" : ""}`}
                   onClick={() => { openRoom(r); setMobileTab("chat"); }}>
@@ -999,7 +999,7 @@ export default function App() {
             </form>
           )}
           <div className="room-list">
-            {rooms.map(r => (
+            {rooms.filter(r => r.type !== "dm").map(r => (
               <div key={r.id}
                 className={`room-item ${activeRoom?.id === r.id ? "active" : ""} ${r.isLobby ? "room-lobby" : ""}`}
                 onClick={() => openRoom(r)}>
@@ -1008,8 +1008,25 @@ export default function App() {
                 {unread[r.id] > 0 && <span className="unread-badge">{unread[r.id]}</span>}
               </div>
             ))}
-            {rooms.length === 0 && <div className="sidebar-empty">belum ada ruangan</div>}
+            {rooms.filter(r => r.type !== "dm").length === 0 && <div className="sidebar-empty">belum ada ruangan</div>}
           </div>
+
+          {/* Section DM (dipisah dari saluran) */}
+          {rooms.filter(r => r.type === "dm").length > 0 && (
+            <>
+              <div className="sidebar-heading">💌 Pesan Pribadi</div>
+              <div className="room-list">
+                {rooms.filter(r => r.type === "dm").map(r => (
+                  <div key={r.id}
+                    className={`room-item ${activeRoom?.id === r.id ? "active" : ""}`}
+                    onClick={() => openRoom(r)}>
+                    <span className="room-hash">💬</span>{resolveDmName(r)}
+                    {unread[r.id] > 0 && <span className="unread-badge">{unread[r.id]}</span>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="sidebar-bottom">
