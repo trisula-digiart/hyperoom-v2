@@ -178,11 +178,17 @@ export async function joinRoom(roomId: string, userId: string): Promise<RoomMemb
   const r = await pools.core.query<{ room_id: string; user_id: string; role: string; joined_at: string }>(
     `INSERT INTO public.room_members (room_id, user_id, role)
      VALUES ($1, $2, 'member')
-     ON CONFLICT (room_id, user_id) DO UPDATE SET role = room_members.role
+     ON CONFLICT (room_id, user_id) DO NOTHING
      RETURNING room_id, user_id, role, joined_at`,
     [roomId, userId]
   );
-  return { roomId: r.rows[0].room_id, userId: r.rows[0].user_id, role: r.rows[0].role as RoomRole, joinedAt: r.rows[0].joined_at };
+  if (r.rows[0]) return { roomId: r.rows[0].room_id, userId: r.rows[0].user_id, role: r.rows[0].role as RoomRole, joinedAt: r.rows[0].joined_at };
+  // udah member — ambil role existing (preserve owner/admin)
+  const existing = await pools.core.query<{ room_id: string; user_id: string; role: string; joined_at: string }>(
+    `SELECT room_id, user_id, role, joined_at FROM public.room_members WHERE room_id = $1 AND user_id = $2`,
+    [roomId, userId]
+  );
+  return { roomId: existing.rows[0].room_id, userId: existing.rows[0].user_id, role: existing.rows[0].role as RoomRole, joinedAt: existing.rows[0].joined_at };
 }
 
 export async function leaveRoom(roomId: string, userId: string): Promise<void> {
@@ -243,6 +249,110 @@ export async function setAvatar(userId: string, storagePath: string, mimeType: s
 export async function getAvatarPath(userId: string): Promise<string | null> {
   const r = await pools.storage.query<{ storage_path: string }>(`SELECT storage_path FROM public.avatars WHERE user_id = $1`, [userId]);
   return r.rows[0]?.storage_path ?? null;
+}
+
+// ---------- MODERATION (core) ----------
+
+export async function setMemberRole(roomId: string, userId: string, role: string): Promise<void> {
+  await pools.core.query(
+    `INSERT INTO public.room_members (room_id, user_id, role) VALUES ($1, $2, $3)
+     ON CONFLICT (room_id, user_id) DO UPDATE SET role = $3`,
+    [roomId, userId, role]
+  );
+}
+
+export async function banUser(roomId: string, userId: string, bannedBy: string, reason?: string | null): Promise<void> {
+  await pools.core.query(
+    `INSERT INTO public.room_bans (room_id, user_id, banned_by, reason) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (room_id, user_id) DO UPDATE SET reason = $4, expires_at = null, created_at = now()`,
+    [roomId, userId, bannedBy, reason ?? null]
+  );
+  await leaveRoom(roomId, userId);
+}
+
+export async function unbanUser(roomId: string, userId: string): Promise<void> {
+  await pools.core.query(`DELETE FROM public.room_bans WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+}
+
+export async function isBanned(roomId: string, userId: string): Promise<boolean> {
+  const r = await pools.core.query(
+    `SELECT 1 FROM public.room_bans WHERE room_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > now())`,
+    [roomId, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function muteUser(roomId: string, userId: string, mutedBy: string, reason?: string | null): Promise<void> {
+  await pools.core.query(
+    `INSERT INTO public.room_mutes (room_id, user_id, muted_by, reason) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (room_id, user_id) DO UPDATE SET reason = $4, expires_at = null, created_at = now()`,
+    [roomId, userId, mutedBy, reason ?? null]
+  );
+}
+
+export async function unmuteUser(roomId: string, userId: string): Promise<void> {
+  await pools.core.query(`DELETE FROM public.room_mutes WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+}
+
+export async function isMuted(roomId: string, userId: string): Promise<boolean> {
+  const r = await pools.core.query(
+    `SELECT 1 FROM public.room_mutes WHERE room_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > now())`,
+    [roomId, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+// ---------- DM (core) ----------
+
+export async function findOrCreateDmRoom(userA: string, userB: string): Promise<Room> {
+  const [x, y] = [userA, userB].sort();
+  const name = `#dm-${x.slice(0, 8)}-${y.slice(0, 8)}`;
+  const existing = await findRoomByName(name);
+  if (existing) return existing;
+  const client = await pools.core.connect();
+  try {
+    await client.query("BEGIN");
+    const room = await client.query<RoomRow>(
+      `INSERT INTO public.rooms (name, type, owner_id) VALUES ($1, 'dm', $2) RETURNING *`,
+      [name, userA]
+    );
+    await client.query(
+      `INSERT INTO public.room_members (room_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING`,
+      [room.rows[0].id, userA, userB]
+    );
+    await client.query("COMMIT");
+    return rowToRoom(room.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------- REACTIONS (chat) ----------
+
+export async function addReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+  await pools.chat.query(
+    `INSERT INTO public.reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+     ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+    [messageId, userId, emoji]
+  );
+}
+
+export async function removeReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+  await pools.chat.query(
+    `DELETE FROM public.reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+    [messageId, userId, emoji]
+  );
+}
+
+export async function listReactions(messageId: string): Promise<{ emoji: string; userId: string }[]> {
+  const r = await pools.chat.query<{ emoji: string; user_id: string }>(
+    `SELECT emoji, user_id FROM public.reactions WHERE message_id = $1`,
+    [messageId]
+  );
+  return r.rows.map((x) => ({ emoji: x.emoji, userId: x.user_id }));
 }
 
 async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {

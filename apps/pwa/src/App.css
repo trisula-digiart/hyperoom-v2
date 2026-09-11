@@ -251,9 +251,44 @@ body { height: 100vh; overflow: hidden; }
   padding: 6px 12px; max-width: 70%;
 }
 .msg-theirs .msg-body { max-width: 70%; }
+.msg-body .mention { color: var(--accent); font-weight: 600; cursor: pointer; }
 .msg-time { font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
 .msg-nick { font-weight: 600; font-size: 13px; white-space: nowrap; }
-.msg-body { font-size: 14px; word-break: break-word; }
+.msg-body { font-size: 14px; word-break: break-word; line-height: 1.5; }
+.msg-reactions { display: flex; gap: 3px; margin-top: 3px; flex-wrap: wrap; }
+.reaction-btn {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 2px 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;
+}
+.reaction-btn:hover { background: rgba(106,95,193,0.1); border-color: var(--purple); }
+.reaction-mine { background: rgba(37,99,235,0.12); border-color: var(--accent); }
+.reaction-add {
+  opacity: 0.4; background: none; border: none; font-size: 12px; cursor: pointer;
+  padding: 2px 4px; border-radius: 8px; transition: opacity 0.15s;
+}
+.reaction-add:hover { opacity: 1; background: rgba(106,95,193,0.08); }
+
+/* Typing indicator */
+.typing-indicator {
+  display: flex; align-items: center; gap: 8px; padding: 3px 16px 3px;
+  font-size: 12px; color: var(--text-dim); font-style: italic;
+  background: var(--bg); border-top: 1px solid rgba(54,45,89,0.3);
+}
+.typing-dots { display: flex; gap: 3px; }
+.typing-dots span {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: typeDot 1.4s infinite;
+}
+.typing-dots .dot2 { animation-delay: 0.2s; }
+.typing-dots .dot3 { animation-delay: 0.4s; }
+@keyframes typeDot { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-3px); } }
+
+/* Mod menu */
+.mod-menu { position: absolute; top: 100%; left: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); z-index: 30; min-width: 170px; padding: 4px 0; }
+.mod-item { padding: 8px 14px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.mod-item:hover { background: var(--accent-light); }
+.mod-item.danger { color: var(--error); }
+.mod-item.promote { color: var(--success); }
+.unread-badge { display: inline-block; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; text-align: center; line-height: 16px; margin-left: 6px; }
 .msg-action { font-style: italic; }
 .msg-action .msg-body { color: var(--text-dim); }
 .msg-system { justify-content: center; padding: 6px 0; }

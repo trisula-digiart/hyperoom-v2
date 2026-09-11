@@ -18,6 +18,8 @@ import {
   setPresence, getPresence, touchUserSeen,
   getRoomPasswordHash, createInvite, hasInvite, consumeInvite,
   setAvatar, getAvatarPath, findLobbyRoom, autoJoinLobby,
+  setMemberRole, banUser, unbanUser, isBanned, muteUser, unmuteUser, isMuted,
+  findOrCreateDmRoom, addReaction, removeReaction, listReactions,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 import { parseCommandLine, executeCommand } from "./commands.js";
@@ -374,6 +376,132 @@ app.post("/api/users/me/avatar", requireAuth, upload.single("avatar"), async (re
 // serve avatars statis
 app.use("/avatars", express.static(AVATAR_DIR, { setHeaders: (res) => res.setHeader("Cache-Control", "no-store") }));
 
+// ---------- MODERATION (Phase 4) ----------
+app.post("/api/rooms/:id/mod/:action", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { username, reason } = req.body || {};
+  const action = req.params.action;
+  if (!username) return res.status(400).json({ error: "username wajib" });
+  const room = await findRoomById(req.params.id);
+  if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  const myRole = await getMemberRole(room.id, req2.userId);
+  const canModerate = myRole === "owner" || myRole === "admin";
+  const canBan = myRole === "owner" || myRole === "admin" || myRole === "operator";
+  const canOp = myRole === "owner";
+  if (!canModerate && !(action === "ban" || action === "kick" || action === "mute" ? canBan : false)) {
+    return res.status(403).json({ error: "tidak punya wewenang" });
+  }
+  const target = await findUserByUsername(username);
+  if (!target) return res.status(404).json({ error: `user "${username}" tidak ditemukan` });
+  if (target.id === req2.userId) return res.status(400).json({ error: "ga bisa aksi ke diri sendiri" });
+
+  const targetRole = await getMemberRole(room.id, target.id);
+  const targetUser = await findUserById(target.id);
+  const nick = targetUser?.display_name || targetUser?.username || username;
+
+  switch (action) {
+    case "kick": {
+      if (!targetRole) return res.status(400).json({ error: `${nick} bukan member room ini` });
+      await leaveRoom(room.id, target.id);
+      const sys = await insertMessage(room.id, target.id, `*** ${nick} has been kicked from ${room.name}`, "system");
+      realtime.broadcastToRoom(room.id, { type: "message:new", message: sys });
+      realtime.broadcastToRoom(room.id, { type: "room:leave", roomId: room.id, userId: target.id });
+      res.json({ ok: true, message: `${nick} di-kick dari ${room.name}` });
+      return;
+    }
+    case "ban": {
+      if (!canBan) return res.status(403).json({ error: "cuma owner/admin/operator yang bisa ban" });
+      await banUser(room.id, target.id, req2.userId, reason);
+      const sys = await insertMessage(room.id, target.id, `*** ${nick} has been banned from ${room.name}${reason ? ` (${reason})` : ""}`, "system");
+      realtime.broadcastToRoom(room.id, { type: "message:new", message: sys });
+      realtime.broadcastToRoom(room.id, { type: "room:leave", roomId: room.id, userId: target.id });
+      res.json({ ok: true, message: `${nick} di-ban dari ${room.name}` });
+      return;
+    }
+    case "unban": {
+      await unbanUser(room.id, target.id);
+      res.json({ ok: true, message: `${nick} di-unban` });
+      return;
+    }
+    case "mute": {
+      await muteUser(room.id, target.id, req2.userId, reason);
+      const sys = await insertMessage(room.id, target.id, `*** ${nick} has been muted in ${room.name}`, "system");
+      realtime.broadcastToRoom(room.id, { type: "message:new", message: sys });
+      res.json({ ok: true, message: `${nick} di-mute` });
+      return;
+    }
+    case "unmute": {
+      await unmuteUser(room.id, target.id);
+      res.json({ ok: true, message: `${nick} di-unmute` });
+      return;
+    }
+    case "op": case "admin": {
+      if (!canOp) return res.status(403).json({ error: "cuma owner yang bisa promote" });
+      if (!targetRole) return res.status(400).json({ error: `${nick} bukan member` });
+      await setMemberRole(room.id, target.id, "admin");
+      res.json({ ok: true, message: `${nick} di-promote jadi admin` });
+      return;
+    }
+    case "deop": case "deadmin": {
+      if (!canOp) return res.status(403).json({ error: "cuma owner yang bisa demote" });
+      await setMemberRole(room.id, target.id, "member");
+      res.json({ ok: true, message: `${nick} di-demote jadi member` });
+      return;
+    }
+    case "voice": {
+      if (!canOp) return res.status(403).json({ error: "cuma owner yang bisa voice" });
+      if (!targetRole) return res.status(400).json({ error: `${nick} bukan member` });
+      await setMemberRole(room.id, target.id, "voice");
+      res.json({ ok: true, message: `${nick} di-set voice` });
+      return;
+    }
+    case "devoice": {
+      if (!canOp) return res.status(403).json({ error: "cuma owner yang bisa devoice" });
+      await setMemberRole(room.id, target.id, "member");
+      res.json({ ok: true, message: `${nick} di-unvoice` });
+      return;
+    }
+    default:
+      res.status(400).json({ error: `action ${action} tidak dikenal` });
+  }
+});
+
+// ---------- DM (Phase 5) ----------
+app.post("/api/dm", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: "username wajib" });
+  const target = await findUserByUsername(username);
+  if (!target) return res.status(404).json({ error: `user "${username}" tidak ditemukan` });
+  const room = await findOrCreateDmRoom(req2.userId, target.id);
+  res.json({ room });
+});
+
+// ---------- REACTIONS (Phase 5) ----------
+app.post("/api/messages/:id/reactions", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: "emoji wajib" });
+  const msg = await findMessage(req.params.id);
+  if (!msg) return res.status(404).json({ error: "pesan tidak ditemukan" });
+  await addReaction(msg.id, req2.userId, emoji);
+  const reactions = await listReactions(msg.id);
+  realtime.broadcastToRoom(msg.room_id, { type: "reaction:add", reaction: { messageId: msg.id, userId: req2.userId, emoji, createdAt: new Date().toISOString() } });
+  res.json({ reactions });
+});
+
+app.delete("/api/messages/:id/reactions", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { emoji } = req.body || {};
+  if (!emoji) return res.status(400).json({ error: "emoji wajib" });
+  const msg = await findMessage(req.params.id);
+  if (!msg) return res.status(404).json({ error: "pesan tidak ditemukan" });
+  await removeReaction(msg.id, req2.userId, emoji);
+  const reactions = await listReactions(msg.id);
+  realtime.broadcastToRoom(msg.room_id, { type: "reaction:remove", messageId: msg.id, emoji, userId: req2.userId });
+  res.json({ reactions });
+});
+
 // ---------- COMMANDS (IRC engine) ----------
 app.post("/api/commands", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
@@ -409,6 +537,11 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   if (!content || !content.trim()) return res.status(400).json({ error: "content required" });
   const room = await findRoomById(req.params.id);
   if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  // moderation enforcement: banned / muted tidak bisa kirim
+  const banned = await isBanned(req.params.id, req2.userId);
+  if (banned) return res.status(403).json({ error: "kamu di-ban dari room ini" });
+  const muted = await isMuted(req.params.id, req2.userId);
+  if (muted) return res.status(403).json({ error: "kamu di-mute di room ini" });
   let role = await getMemberRole(req.params.id, req2.userId);
   if (!role) {
     // Auto-join public room when posting (real membership) — idempotent

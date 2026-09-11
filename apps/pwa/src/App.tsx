@@ -160,6 +160,12 @@ export default function App() {
   const [inviteMsg, setInviteMsg] = useState("");
   const [expandGlobal, setExpandGlobal] = useState(true);
   const [expandRoom, setExpandRoom] = useState(true);
+  const [modTarget, setModTarget] = useState<any>(null);   // moderation menu target
+  const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
+  const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const activeRoomRef = useRef<string | null>(null);
+  useEffect(() => { activeRoomRef.current = activeRoom?.id || null; }, [activeRoom]);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -175,7 +181,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user]);
 
-  // fetch messages + members when room changes (auto-join public)
+  // fetch messages + members + reactions when room changes
   const prevRoomRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeRoom) return;
@@ -184,9 +190,19 @@ export default function App() {
       wsSend({ type: "room:leave", roomId: prevRoomRef.current });
     }
     prevRoomRef.current = activeRoom.id;
-    // Ensure membership (public rooms auto-join)
     api("POST", `/api/rooms/${activeRoom.id}/join`).catch(() => {});
-    api<{ messages: Message[] }>("GET", `/api/rooms/${activeRoom.id}/messages`).then(r => setMessages(r.messages)).catch(() => setMessages([]));
+    // clear unread for this room
+    setUnread(prev => { if (!(prev[activeRoom.id] > 0)) return prev; const n = { ...prev }; delete n[activeRoom.id]; return n; });
+    api<{ messages: Message[] }>("GET", `/api/rooms/${activeRoom.id}/messages`).then(r => {
+      setMessages(r.messages);
+      const ids = r.messages.map(m => m.id);
+      Promise.all(ids.map(id => api<{ reactions: any[] }>(`GET`, `/api/messages/${id}/reactions`).catch(() => ({ reactions: [] }))))
+        .then(results => {
+          const map: Record<string, any[]> = {};
+          results.forEach((res: any, i) => { if (res.reactions?.length) map[ids[i]] = res.reactions; });
+          setReactionsMap(map);
+        });
+    }).catch(() => setMessages([]));
     api<{ members: Member[] }>("GET", `/api/rooms/${activeRoom.id}/members`).then(r => setMembers(r.members)).catch(() => setMembers([]));
     inputRef.current?.focus();
   }, [activeRoom]);
@@ -207,6 +223,11 @@ export default function App() {
     switch (evt.type) {
       case "message:new":
         setMessages(prev => [...prev, evt.message]);
+        // unread badge kalau room bukan aktif
+        setUnread(prev => {
+          if (evt.message.roomId === activeRoomRef.current) return prev;
+          return { ...prev, [evt.message.roomId]: (prev[evt.message.roomId] || 0) + 1 };
+        });
         break;
       case "message:edit":
         setMessages(prev => prev.map(m => m.id === evt.message.id ? { ...m, content: evt.message.content } : m));
@@ -226,6 +247,31 @@ export default function App() {
           next.set(evt.presence.userId, evt.presence);
           return next;
         });
+        break;
+      case "typing:start":
+        setTypingUsers(prev => {
+          const cur = prev[evt.roomId] || [];
+          return cur.includes(evt.userId) ? prev : { ...prev, [evt.roomId]: [...cur, evt.userId] };
+        });
+        setTimeout(() => {
+          setTypingUsers(prev => ({ ...prev, [evt.roomId]: (prev[evt.roomId] || []).filter(u => u !== evt.userId) }));
+        }, 4000);
+        break;
+      case "typing:stop":
+        setTypingUsers(prev => ({ ...prev, [evt.roomId]: (prev[evt.roomId] || []).filter(u => u !== evt.userId) }));
+        break;
+      case "reaction:add":
+        setReactionsMap(prev => {
+          const cur = prev[(evt as any).reaction.messageId] || [];
+          if (cur.find(r => r.userId === (evt as any).reaction.userId && r.emoji === (evt as any).reaction.emoji)) return prev;
+          return { ...prev, [(evt as any).reaction.messageId]: [...cur, { emoji: (evt as any).reaction.emoji, userId: (evt as any).reaction.userId }] };
+        });
+        break;
+      case "reaction:remove":
+        setReactionsMap(prev => ({
+          ...prev,
+          [(evt as any).messageId]: (prev[(evt as any).messageId] || []).filter(r => !(r.userId === (evt as any).userId && r.emoji === (evt as any).emoji)),
+        }));
         break;
     }
   }, []);
@@ -376,6 +422,47 @@ export default function App() {
     } catch (err) { setInviteMsg(`❌ ${(err as Error).message}`); }
   };
 
+  const doMod = async (action: string, username: string) => {
+    if (!activeRoom) return;
+    try {
+      const r = await api<{ message: string }>("POST", `/api/rooms/${activeRoom.id}/mod/${action}`, { username });
+      setModTarget(null);
+      api<{ members: Member[] }>("GET", `/api/rooms/${activeRoom.id}/members`).then(x => setMembers(x.members)).catch(() => {});
+      alert(r.message);
+    } catch (err) { alert((err as Error).message); }
+  };
+
+  const toggleReaction = async (msgId: string, emoji: string) => {
+    const cur = reactionsMap[msgId] || [];
+    const mine = cur.find(r => r.userId === user?.id && r.emoji === emoji);
+    try {
+      const r = mine
+        ? await api<{ reactions: any[] }>("DELETE", `/api/messages/${msgId}/reactions`, { emoji })
+        : await api<{ reactions: any[] }>("POST", `/api/messages/${msgId}/reactions`, { emoji });
+      setReactionsMap(prev => ({ ...prev, [msgId]: r.reactions }));
+    } catch {}
+  };
+
+  const openDm = async (username: string) => {
+    try {
+      const r = await api<{ room: Room }>("POST", "/api/dm", { username });
+      setRooms(prev => prev.find(x => x.id === r.room.id) ? prev : [...prev, r.room]);
+      setActiveRoom(r.room);
+      setProfileUser(null);
+    } catch (err) { alert((err as Error).message); }
+  };
+
+  let typingTimer: any = null;
+  const notifyTyping = () => {
+    if (!activeRoom) return;
+    if (typingTimer) return;
+    wsSend({ type: "typing:start", roomId: activeRoom.id });
+    typingTimer = setTimeout(() => {
+      wsSend({ type: "typing:stop", roomId: activeRoom.id });
+      typingTimer = null;
+    }, 3000);
+  };
+
   const rolePrefix = (role: string) => {
     switch (role) {
       case "owner": return "@";
@@ -403,6 +490,8 @@ export default function App() {
     setSuggestions([]);
     inputRef.current?.focus();
   };
+
+  const isProfileSelf = profileUser && user && profileUser.id === user?.id;
 
   if (!user) return <AuthScreen onAuthed={setSUser} />;
 
@@ -446,6 +535,7 @@ export default function App() {
                 onClick={() => openRoom(r)}>
                 <span className="room-hash">{r.isLobby ? "🏠" : "#"}</span>{r.name.slice(1)}
                 {(r.type === "private" || r.isLocked) && <span className="room-lock-icon">🔒</span>}
+                {unread[r.id] > 0 && <span className="unread-badge">{unread[r.id]}</span>}
               </div>
             ))}
             {rooms.length === 0 && <div className="sidebar-empty">belum ada ruangan</div>}
@@ -522,20 +612,47 @@ export default function App() {
             if (isSystem) {
               return <div key={msg.id} className="msg msg-system"><span className="msg-system-text">{msg.content}</span></div>;
             }
+            const msgReactions = reactionsMap[msg.id] || [];
+            // group reactions by emoji
+            const grouped: Record<string, { emoji: string; count: number; mine: boolean }> = {};
+            for (const r of msgReactions) {
+              if (!grouped[r.emoji]) grouped[r.emoji] = { emoji: r.emoji, count: 0, mine: false };
+              grouped[r.emoji].count++;
+              if (r.userId === user?.id) grouped[r.emoji].mine = true;
+            }
             return (
               <div key={msg.id} className={`msg ${isAction ? "msg-action" : ""} ${isMine ? "msg-mine" : "msg-theirs"}`}>
                 <span className="msg-time">{fmtTime(msg.createdAt)}</span>
                 <span className="msg-nick" style={{ color: nickColor(msg.authorId) }}>
                   {msg.authorName || shortId(msg.authorId)}
                 </span>
-                <span className="msg-body">
-                  {isAction ? ` ${msg.content}` : msg.content}
-                </span>
+                <span className="msg-body">{isAction ? ` ${msg.content}` : msg.content}</span>
+                <div className="msg-reactions">
+                  {Object.values(grouped).map(g => (
+                    <button key={g.emoji}
+                      className={`reaction-btn ${g.mine ? "reaction-mine" : ""}`}
+                      onClick={() => toggleReaction(msg.id, g.emoji)}
+                    >{g.emoji} {g.count > 1 ? g.count : ""}</button>
+                  ))}
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "👍")} title="👍">👍</button>
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "❤️")} title="❤️">❤️</button>
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😂")} title="😂">😂</button>
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😮")} title="😮">😮</button>
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😢")} title="😢">😢</button>
+                  <button className="reaction-add" onClick={() => toggleReaction(msg.id, "😡")} title="😡">😡</button>
+                </div>
               </div>
             );
           })}
           <div ref={messagesEnd} />
         </div>
+
+        {(typingUsers[activeRoom?.id || ""] || []).length > 0 && (
+          <div className="typing-indicator">
+            <div className="typing-dots"><span className="dot1" /><span className="dot2" /><span className="dot3" /></div>
+            {typingUsers[activeRoom?.id || ""].map(u => (members.find(m => m.userId === u)?.displayName || u.slice(0, 6))).join(", ")} sedang mengetik…
+          </div>
+        )}
 
         <form className="input-bar" onSubmit={handleSend}>
           <span className="input-prefix">{activeRoom ? `#${activeRoom.name.slice(1)}` : ""}</span>
@@ -550,7 +667,7 @@ export default function App() {
             <input
               ref={inputRef}
               value={input}
-              onChange={e => handleInputChange(e.target.value)}
+              onChange={e => { handleInputChange(e.target.value); notifyTyping(); }}
               placeholder={activeRoom ? `Ketik pesan atau / bikin command…` : "Pilih ruangan dulu"}
               disabled={!activeRoom}
               autoFocus
@@ -611,7 +728,7 @@ export default function App() {
                         const nick = m.displayName || m.username || shortId(m.userId);
                         const prefix = m.role !== "member" ? rolePrefix(m.role) : "";
                         return (
-                          <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)}>
+                          <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)} style={{position: "relative"}}>
                             <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
                               <span>{nick[0].toUpperCase()}</span>
                               <span className={`member-dot ${isOnline ? "online" : ""}`} />
@@ -725,14 +842,24 @@ export default function App() {
                 <div className="profile-row"><span>Room</span><span>{profileUser.rooms.map(r => `#${r.name.slice(1)} (${r.role})`).join(", ")}</span></div>
               )}
             </div>
-            {profileUser.id === user?.id && (
-              <div className="profile-actions">
+            <div className="profile-actions">
+              {!isProfileSelf && (
+                <>
+                  <button className="btn-primary btn-dm" onClick={() => { openDm(profileUser.username); setProfileUser(null); }}>💬 Pesan</button>
+                  {user?.id === activeRoom?.ownerId && (
+                    <>
+                      <button className="btn-primary btn-promote" onClick={() => { doMod("op", profileUser.username); setProfileUser(null); }}>⬆️ Promote</button>
+                      <button className="btn-danger" onClick={() => { doMod("kick", profileUser.username); setProfileUser(null); }}>❌ Kick</button>
+                      <button className="btn-danger" onClick={() => { doMod("mute", profileUser.username); setProfileUser(null); }}>🔇 Mute</button>
+                    </>
+                  )}
+                </>
+              )}
+              {isProfileSelf && (
                 <button className="btn-primary" onClick={() => setProfileUser(null)}>Tutup</button>
-              </div>
-            )}
-            <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button>
+              )}
             </div>
+            {!isProfileSelf && <div className="modal-actions"><button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button></div>}
           </div>
         </div>
       )}
