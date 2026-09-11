@@ -211,7 +211,18 @@ app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
 app.get("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit || "100"), 10), 500);
   const messages = await listMessages(req.params.id, limit);
-  res.json({ messages });
+  // resolve author nicknames (core users) — so UI shows names not UUIDs
+  const ids = [...new Set(messages.map((m) => m.authorId))];
+  const users = await pools.core.query(
+    `SELECT id, username, display_name FROM public.users WHERE id = ANY($1::uuid[])`,
+    [ids]
+  );
+  const nameMap = new Map(users.rows.map((u) => [u.id, u.display_name || u.username]));
+  const enriched = messages.map((m) => ({
+    ...m,
+    authorName: nameMap.get(m.authorId) || m.authorId.slice(0, 8),
+  }));
+  res.json({ messages: enriched });
 });
 
 app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {

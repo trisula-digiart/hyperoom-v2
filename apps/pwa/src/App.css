@@ -184,6 +184,14 @@ body { height: 100vh; overflow: hidden; }
 .empty-icon { font-size: 40px; margin-bottom: 8px; opacity: 0.5; }
 .empty-sub { font-size: 12px; margin-top: 4px; }
 .msg { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; line-height: 1.5; }
+.msg-mine { flex-direction: row-reverse; }
+.msg-mine .msg-nick { order: 1; }
+.msg-mine .msg-time { order: 2; min-width: auto; }
+.msg-mine .msg-body {
+  background: var(--accent-light); border-radius: 12px 12px 2px 12px;
+  padding: 6px 12px; max-width: 70%;
+}
+.msg-theirs .msg-body { max-width: 70%; }
 .msg-time { font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
 .msg-nick { font-weight: 600; font-size: 13px; white-space: nowrap; }
 .msg-body { font-size: 14px; word-break: break-word; }

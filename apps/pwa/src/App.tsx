@@ -7,7 +7,7 @@ import "./App.css";
 interface Profile { id: string; username: string; displayName?: string; createdAt: string }
 interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string }
 interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null }
-interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null }
+interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null; authorName?: string }
 interface Presence { userId: string; status: string }
 
 // mIRC nick colors
@@ -400,14 +400,15 @@ export default function App() {
           {messages.map(msg => {
             const isAction = msg.kind === "action";
             const isSystem = msg.kind === "system";
+            const isMine = msg.authorId === user?.id;
             if (isSystem) {
               return <div key={msg.id} className="msg msg-system"><span className="msg-system-text">{msg.content}</span></div>;
             }
             return (
-              <div key={msg.id} className={`msg ${isAction ? "msg-action" : ""}`}>
+              <div key={msg.id} className={`msg ${isAction ? "msg-action" : ""} ${isMine ? "msg-mine" : "msg-theirs"}`}>
                 <span className="msg-time">{fmtTime(msg.createdAt)}</span>
                 <span className="msg-nick" style={{ color: nickColor(msg.authorId) }}>
-                  {shortId(msg.authorId)}
+                  {msg.authorName || shortId(msg.authorId)}
                 </span>
                 <span className="msg-body">
                   {isAction ? ` ${msg.content}` : msg.content}
