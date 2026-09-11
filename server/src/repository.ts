@@ -10,6 +10,8 @@ export interface DbUser {
   platform_role: string;
   phone: string | null;
   last_seen_at: string | null;
+  bio: string | null;
+  status: string | null;
   created_at: string;
 }
 
@@ -98,6 +100,7 @@ interface RoomRow {
   topic: string | null;
   is_locked: boolean;
   owner_id: string;
+  password_hash: string | null;
   created_at: string;
 }
 
@@ -113,14 +116,14 @@ function rowToRoom(r: RoomRow): Room {
   };
 }
 
-export async function createRoom(name: string, type: string, ownerId: string, topic?: string): Promise<Room> {
+export async function createRoom(name: string, type: string, ownerId: string, topic?: string, passwordHash?: string | null, description?: string | null): Promise<Room> {
   const client = await pools.core.connect();
   try {
     await client.query("BEGIN");
     const room = await client.query<RoomRow>(
-      `INSERT INTO public.rooms (name, type, topic, owner_id)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, type, topic ?? null, ownerId]
+      `INSERT INTO public.rooms (name, type, topic, owner_id, password_hash)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [name, type, topic ?? null, ownerId, passwordHash ?? null]
     );
     await client.query(
       `INSERT INTO public.room_members (room_id, user_id, role) VALUES ($1, $2, 'owner')`,
@@ -187,6 +190,45 @@ export async function setRoomTopic(roomId: string, topic: string | null): Promis
 export async function isRoomMember(roomId: string, userId: string): Promise<boolean> {
   const r = await pools.core.query(`SELECT 1 FROM public.room_members WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
   return (r.rowCount ?? 0) > 0;
+}
+
+export async function getRoomPasswordHash(roomId: string): Promise<string | null> {
+  const r = await pools.core.query<{ password_hash: string | null }>(`SELECT password_hash FROM public.rooms WHERE id = $1`, [roomId]);
+  return r.rows[0]?.password_hash ?? null;
+}
+
+// ---------- INVITES (core) ----------
+
+export async function createInvite(roomId: string, userId: string, invitedBy: string): Promise<void> {
+  await pools.core.query(
+    `INSERT INTO public.room_invites (room_id, user_id, invited_by) VALUES ($1, $2, $3)
+     ON CONFLICT (room_id, user_id) DO NOTHING`,
+    [roomId, userId, invitedBy]
+  );
+}
+
+export async function hasInvite(roomId: string, userId: string): Promise<boolean> {
+  const r = await pools.core.query(`SELECT 1 FROM public.room_invites WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function consumeInvite(roomId: string, userId: string): Promise<void> {
+  await pools.core.query(`DELETE FROM public.room_invites WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+}
+
+// ---------- AVATARS (storage) ----------
+
+export async function setAvatar(userId: string, storagePath: string, mimeType: string, sizeBytes: number): Promise<void> {
+  await pools.storage.query(
+    `INSERT INTO public.avatars (user_id, storage_path, mime_type, size_bytes) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id) DO UPDATE SET storage_path = $2, mime_type = $3, size_bytes = $4, created_at = now()`,
+    [userId, storagePath, mimeType, sizeBytes]
+  );
+}
+
+export async function getAvatarPath(userId: string): Promise<string | null> {
+  const r = await pools.storage.query<{ storage_path: string }>(`SELECT storage_path FROM public.avatars WHERE user_id = $1`, [userId]);
+  return r.rows[0]?.storage_path ?? null;
 }
 
 async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {

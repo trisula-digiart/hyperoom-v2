@@ -2,7 +2,11 @@ import "dotenv/config";
 import express from "express";
 import http from "node:http";
 import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import multer from "multer";
+import bcrypt from "bcryptjs";
 import { config } from "./config.js";
 import { pools, checkZone } from "./db.js";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth.js";
@@ -12,11 +16,32 @@ import {
   joinRoom, leaveRoom, getMemberRole, listRoomMembers, listRoomMembersDetailed, setRoomTopic, isRoomMember,
   insertMessage, listMessages, editMessage, deleteMessage, findMessage,
   setPresence, getPresence, touchUserSeen,
+  getRoomPasswordHash, createInvite, hasInvite, consumeInvite,
+  setAvatar, getAvatarPath,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 import { parseCommandLine, executeCommand } from "./commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// --- avatar upload ---
+const AVATAR_DIR = path.join("H:", "HYPEROOM-SERVER", "storage", "public", "avatars");
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, AVATAR_DIR),
+    filename: (req, file, cb) => {
+      const ext = (file.originalname.match(/\.(\w+)$/) || [])[1] || "jpg";
+      const uid = (req as express.Request & { userId?: string }).userId || "anon";
+      cb(null, `${uid}-${Date.now()}.${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("file harus gambar"));
+  },
+});
 
 const app = express();
 app.use(express.json());
@@ -142,11 +167,15 @@ app.get("/api/rooms", requireAuth, async (req, res) => {
 
 app.post("/api/rooms", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
-  const { name, type, topic } = req.body || {};
-  if (!name || !type) return res.status(400).json({ error: "name and type required" });
+  const { name, type, topic, password } = req.body || {};
+  if (!name || !type) return res.status(400).json({ error: "name dan type wajib" });
   const normalized = name.startsWith("#") ? name : "#" + name;
+  let passwordHash: string | null = null;
+  if (type === "private" || (password && password.length > 0)) {
+    passwordHash = await hashPassword(password || "private");
+  }
   try {
-    const room = await createRoom(normalized, type, req2.userId, topic);
+    const room = await createRoom(normalized, type, req2.userId, topic, passwordHash);
     realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member: { roomId: room.id, userId: req2.userId, role: "owner", joinedAt: new Date().toISOString() } });
     res.status(201).json({ room });
   } catch (err) {
@@ -159,17 +188,35 @@ app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const room = await findRoomById(req.params.id);
   if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
-  if (room.isLocked) {
-    const role = await getMemberRole(room.id, req2.userId);
-    if (!role) return res.status(403).json({ error: "ruangan terkunci, undangan diperlukan" });
-  }
-  // Idempotent: kalau sudah member, jangan tulis system message lagi (refresh-safe)
-  const existing = await getMemberRole(room.id, req2.userId);
-  if (existing) {
-    const member = { roomId: room.id, userId: req2.userId, role: existing, joinedAt: new Date().toISOString() };
+  const { password } = req.body || {};
+
+  // sudah member? langsung boleh
+  const existingRole = await getMemberRole(room.id, req2.userId);
+  if (existingRole) {
+    const member = { roomId: room.id, userId: req2.userId, role: existingRole, joinedAt: new Date().toISOString() };
     res.json({ room, member, alreadyMember: true });
     return;
   }
+
+  // private room: butuh password ATAU invite
+  if (room.type === "private") {
+    const pwHash = await getRoomPasswordHash(room.id);
+    if (pwHash) {
+      const pwOk = password ? await verifyPassword(String(password), pwHash) : false;
+      if (!pwOk) {
+        // fallback: invite?
+        const invited = await hasInvite(room.id, req2.userId);
+        if (!invited) return res.status(403).json({ error: "password room salah, atau kamu belum diundang" });
+        await consumeInvite(room.id, req2.userId);
+      }
+    }
+  }
+  if (room.isLocked) {
+    const invited = await hasInvite(room.id, req2.userId);
+    if (!invited) return res.status(403).json({ error: "ruangan terkunci, undangan diperlukan" });
+    await consumeInvite(room.id, req2.userId);
+  }
+
   const member = await joinRoom(room.id, req2.userId);
   // real join event: system message (mIRC style) + broadcast
   const user = await findUserById(req2.userId);
@@ -221,6 +268,72 @@ app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
   realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
   res.json({ room: updated });
 });
+
+// ---------- INVITES ----------
+app.post("/api/rooms/:id/invite", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: "username wajib" });
+  const room = await findRoomById(req.params.id);
+  if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  const role = await getMemberRole(room.id, req2.userId);
+  if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "hanya owner/admin yang bisa mengundang" });
+  const target = await findUserByUsername(username);
+  if (!target) return res.status(404).json({ error: `user "${username}" tidak ditemukan` });
+  await createInvite(room.id, target.id, req2.userId);
+  res.json({ ok: true, message: `${target.display_name || target.username} diundang ke ${room.name}` });
+});
+
+// ---------- PROFILES ----------
+app.get("/api/users/:id", requireAuth, async (req, res) => {
+  const user = await findUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: "user tidak ditemukan" });
+  const avatarPath = await getAvatarPath(user.id);
+  const memberOf = await pools.core.query(
+    `SELECT r.name, m.role FROM room_members m JOIN rooms r ON r.id=m.room_id WHERE m.user_id = $1`,
+    [user.id]
+  );
+  res.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      bio: user.bio,
+      status: user.status,
+      avatarUrl: avatarPath ? `/avatars/${path.basename(avatarPath)}` : null,
+      createdAt: user.created_at,
+      lastSeenAt: user.last_seen_at,
+      platformRole: user.platform_role,
+      rooms: memberOf.rows.map((r) => ({ name: r.name, role: r.role })),
+    },
+  });
+});
+
+app.patch("/api/users/me", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { displayName, bio, status } = req.body || {};
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (typeof displayName === "string") { sets.push("display_name = $n"); vals.push(displayName.trim() || null); }
+  if (typeof bio === "string") { sets.push("bio = $n"); vals.push(bio.trim() || null); }
+  if (typeof status === "string") { sets.push("status = $n"); vals.push(status.trim() || null); }
+  if (sets.length === 0) return res.status(400).json({ error: "tidak ada field diubah" });
+  const query = `UPDATE public.users SET ${sets.map(s => s.replace("$n", `$${sets.indexOf(s) + 1}`)).join(", ")}, updated_at = now() WHERE id = $${sets.length + 1}`;
+  await pools.core.query(query, [...vals, req2.userId]);
+  res.json({ ok: true });
+});
+
+// avatar upload (multipart image)
+app.post("/api/users/me/avatar", requireAuth, upload.single("avatar"), async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  if (!req.file) return res.status(400).json({ error: "avatar file wajib" });
+  const relPath = path.join(AVATAR_DIR, req.file.filename);
+  await setAvatar(req2.userId, relPath, req.file.mimetype, req.file.size);
+  res.json({ ok: true, avatarUrl: `/avatars/${req.file.filename}` });
+});
+
+// serve avatars statis
+app.use("/avatars", express.static(AVATAR_DIR, { setHeaders: (res) => res.setHeader("Cache-Control", "no-store") }));
 
 // ---------- COMMANDS (IRC engine) ----------
 app.post("/api/commands", requireAuth, async (req, res) => {

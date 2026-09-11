@@ -144,8 +144,17 @@ export default function App() {
   const [input, setInput] = useState("");
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
+  const [newRoomType, setNewRoomType] = useState<"public" | "private">("public");
+  const [newRoomTopic, setNewRoomTopic] = useState("");
+  const [newRoomDesc, setNewRoomDesc] = useState("");
+  const [newRoomPass, setNewRoomPass] = useState("");
   const [wsConnected, setWsConnected] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [joinPrompt, setJoinPrompt] = useState<Room | null>(null);
+  const [joinPassword, setJoinPassword] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [profileError, setProfileError] = useState("");
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -261,11 +270,40 @@ export default function App() {
     e.preventDefault();
     if (!newRoomName.trim()) return;
     try {
-      const r = await api<{ room: Room }>("POST", "/api/rooms", { name: newRoomName, type: "public" });
+      const r = await api<{ room: Room }>("POST", "/api/rooms", {
+        name: newRoomName, type: newRoomType,
+        topic: newRoomTopic || undefined,
+        password: newRoomType === "private" ? newRoomPass : undefined,
+      });
       setRooms(prev => [...prev, r.room]);
       setActiveRoom(r.room);
-      setShowCreateRoom(false); setNewRoomName("");
+      setShowCreateRoom(false); setNewRoomName(""); setNewRoomType("public"); setNewRoomTopic(""); setNewRoomDesc(""); setNewRoomPass("");
     } catch (err) { alert((err as Error).message); }
+  };
+
+  // click room: if private & not member → password prompt; else open
+  const openRoom = async (room: Room) => {
+    // check membership via members endpoint attempt — if fails, prompt
+    try {
+      await api("POST", `/api/rooms/${room.id}/join`, {});
+      setActiveRoom(room);
+    } catch (err) {
+      if (room.type === "private" || room.isLocked) {
+        setJoinPrompt(room); setJoinPassword(""); setJoinError("");
+      } else {
+        setActiveRoom(room);
+      }
+    }
+  };
+  const submitJoinPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinPrompt) return;
+    try {
+      await api("POST", `/api/rooms/${joinPrompt.id}/join`, { password: joinPassword });
+      setJoinPrompt(null);
+      setActiveRoom(joinPrompt);
+      api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => setRooms(r.rooms)).catch(() => {});
+    } catch (err) { setJoinError((err as Error).message); }
   };
 
   const handleLogout = () => { logout(); setSUser(null); };
@@ -287,6 +325,13 @@ export default function App() {
       setActiveRoom(null);
       api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => setRooms(r.rooms));
     } catch (err) { alert((err as Error).message); }
+  };
+
+  const fetchProfile = async (userId: string) => {
+    try {
+      const r = await api<{ user: any }>("GET", `/api/users/${userId}`);
+      setProfileUser(r.user); setProfileError("");
+    } catch (err) { setProfileError((err as Error).message); setProfileUser(null); }
   };
 
   const rolePrefix = (role: string) => {
@@ -335,16 +380,30 @@ export default function App() {
         </div>
           {showCreateRoom && (
             <form className="create-room" onSubmit={createRoom}>
-              <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="#ruangan-baru" autoFocus />
-              <button type="submit" className="btn-sm">Buat</button>
+              <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="#nama-ruangan" autoFocus required />
+              <input value={newRoomTopic} onChange={e => setNewRoomTopic(e.target.value)} placeholder="Topik (opsional)" />
+              <input value={newRoomDesc} onChange={e => setNewRoomDesc(e.target.value)} placeholder="Deskripsi (opsional)" />
+              <div className="room-type-row">
+                <label className={`type-opt ${newRoomType === "public" ? "sel" : ""}`}>
+                  <input type="radio" name="rtype" checked={newRoomType === "public"} onChange={() => setNewRoomType("public")} /> Public
+                </label>
+                <label className={`type-opt ${newRoomType === "private" ? "sel" : ""}`}>
+                  <input type="radio" name="rtype" checked={newRoomType === "private"} onChange={() => setNewRoomType("private")} /> Private 🔒
+                </label>
+              </div>
+              {newRoomType === "private" && (
+                <input type="password" value={newRoomPass} onChange={e => setNewRoomPass(e.target.value)} placeholder="Password room" required />
+              )}
+              <button type="submit" className="btn-sm">Buat Room</button>
             </form>
           )}
           <div className="room-list">
             {rooms.map(r => (
               <div key={r.id}
                 className={`room-item ${activeRoom?.id === r.id ? "active" : ""}`}
-                onClick={() => setActiveRoom(r)}>
+                onClick={() => openRoom(r)}>
                 <span className="room-hash">#</span>{r.name.slice(1)}
+                {(r.type === "private" || r.isLocked) && <span className="room-lock-icon">🔒</span>}
               </div>
             ))}
             {rooms.length === 0 && <div className="sidebar-empty">belum ada ruangan</div>}
@@ -453,7 +512,7 @@ export default function App() {
                   const nick = m.displayName || m.username || shortId(m.userId);
                   const prefix = m.role !== "member" ? rolePrefix(m.role) : "";
                   return (
-                    <div key={m.userId} className="member-item">
+                    <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)}>
                       <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
                         <span>{nick[0].toUpperCase()}</span>
                         <span className={`member-dot ${isOnline ? "online" : ""}`} />
@@ -483,6 +542,59 @@ export default function App() {
                 <button type="submit" className="btn-primary">Simpan</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Join private room password modal */}
+      {joinPrompt && (
+        <div className="modal-overlay" onClick={() => setJoinPrompt(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>🔒 Room privat #{joinPrompt.name.slice(1)}</h3>
+            <p className="modal-sub">Masukkan password room atau tunggu undangan owner</p>
+            <form onSubmit={submitJoinPassword}>
+              <input type="password" value={joinPassword} onChange={e => setJoinPassword(e.target.value)} placeholder="Password room" autoFocus />
+              {joinError && <div className="auth-error">{joinError}</div>}
+              <div className="modal-actions">
+                <button type="button" className="btn-ghost" onClick={() => setJoinPrompt(null)}>Batal</button>
+                <button type="submit" className="btn-primary">Masuk</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Profile modal */}
+      {profileUser && (
+        <div className="modal-overlay" onClick={() => setProfileUser(null)}>
+          <div className="modal profile-modal" onClick={e => e.stopPropagation()}>
+            <div className="profile-head">
+              {profileUser.avatarUrl
+                ? <img src={profileUser.avatarUrl} alt="avatar" className="profile-avatar" />
+                : <div className="profile-avatar profile-avatar-ph" style={{ background: nickColor(profileUser.id) }}>{profileUser.username[0].toUpperCase()}</div>
+              }
+              <div>
+                <h3>{profileUser.displayName || profileUser.username}</h3>
+                <div className="profile-username">@{profileUser.username}</div>
+                {profileUser.platformRole && <span className="profile-role">{profileUser.platformRole}</span>}
+              </div>
+            </div>
+            <div className="profile-body">
+              <div className="profile-row"><span>Bio</span><span>{profileUser.bio || "—"}</span></div>
+              <div className="profile-row"><span>Status</span><span>{profileUser.status || "—"}</span></div>
+              <div className="profile-row"><span>Gabung</span><span>{fmtTime(profileUser.createdAt)}</span></div>
+              {profileUser.rooms && profileUser.rooms.length > 0 && (
+                <div className="profile-row"><span>Room</span><span>{profileUser.rooms.map(r => `#${r.name.slice(1)} (${r.role})`).join(", ")}</span></div>
+              )}
+            </div>
+            {profileUser.id === user?.id && (
+              <div className="profile-actions">
+                <button className="btn-primary" onClick={() => setProfileUser(null)}>Tutup</button>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn-ghost" onClick={() => setProfileUser(null)}>Tutup</button>
+            </div>
           </div>
         </div>
       )}
