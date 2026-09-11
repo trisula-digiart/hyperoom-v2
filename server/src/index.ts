@@ -506,6 +506,13 @@ app.post("/api/dm", requireAuth, async (req, res) => {
 });
 
 // ---------- REACTIONS (Phase 5) ----------
+app.get("/api/messages/:id/reactions", requireAuth, async (req, res) => {
+  const msg = await findMessage(req.params.id);
+  if (!msg) return res.status(404).json({ error: "pesan tidak ditemukan" });
+  const reactions = await listReactions(msg.id);
+  res.json({ reactions });
+});
+
 app.post("/api/messages/:id/reactions", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const { emoji } = req.body || {};
