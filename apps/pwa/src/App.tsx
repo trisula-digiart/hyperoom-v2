@@ -73,6 +73,7 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [d, setD] = useState(""); const [ph, setPh] = useState("");
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [step, setStep] = useState(0); // wizard: 0=hook, 1=fitur, 2=form
 
   useEffect(() => {
     const tok = getToken();
@@ -81,6 +82,13 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
       setUser(r.user); onAuthed(r.user);
     }).catch(() => { setChecking(false); });
   }, []);
+
+  // auto-advance wizard (non-intrusif, berhenti di form)
+  useEffect(() => {
+    if (checking || step >= 2) return;
+    const t = setTimeout(() => setStep(s => Math.min(s + 1, 2)), 6000);
+    return () => clearTimeout(t);
+  }, [step, checking]);
 
   if (checking) return <BootLoader />;
 
@@ -93,41 +101,96 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
   };
 
   return (
-    <div className="auth-bg">
-      <div className="auth-card">
-        <div className="auth-logo-wrap">
-          <img src="/logo.png" alt="Hyperoom" className="auth-logo-img" />
+    <div className="auth-bg wizard-bg">
+      <div className="wizard-logo"><img src="/logo.png" alt="Hyperoom" /></div>
+
+      {/* SLIDE 0 — hook */}
+      {step === 0 && (
+        <div className="wizard-slide wizard-slide-hook">
+          <div className="wizard-title">Ngumpul Bareng.<br />Tanpa Ribet.</div>
+          <div className="wizard-sub">Tempat kumpul buat lo yang mau ngobrol santai,<br />dapet ilmu, dapet temen baru.</div>
+          <div className="wizard-cta">
+            <button className="btn-primary btn-big" onClick={() => setStep(1)}>Lanjut ➜</button>
+            <button className="wizard-skip" onClick={() => setStep(2)}>Lewati, langsung daftar</button>
+          </div>
         </div>
-        <div className="auth-sub">v2 — server rumah</div>
-        <form onSubmit={submit} className="auth-form">
-          {mode === "signup" && (
-            <>
-              <label>Nama Tampilan
-                <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" />
-              </label>
-              <label>Nomor HP
-                <input value={ph} onChange={e => setPh(e.target.value)} placeholder="08xxxxxxxxxx (opsional)" inputMode="tel" />
-              </label>
-              <div className="privacy-note">🔒 Nomor HP cuma buat lo, ga bakal ditampilkan ke user lain</div>
-            </>
-          )}
-          <label>Username
-            <input value={u} onChange={e => setU(e.target.value)} required autoFocus={mode === "login"} />
-          </label>
-          <label>Password
-            <input type="password" value={p} onChange={e => setP(e.target.value)} required minLength={6} />
-          </label>
-          {err && <div className="auth-error">{err}</div>}
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? "…" : mode === "login" ? "Masuk" : "Buat Akun"}
-          </button>
-        </form>
-        <div className="auth-switch">
-          {mode === "login"
-            ? <>Belum punya akun? <button onClick={() => setMode("signup")}>Daftar</button></>
-            : <>Udah punya akun? <button onClick={() => setMode("login")}>Masuk</button></>
-          }
+      )}
+
+      {/* SLIDE 1 — fitur */}
+      {step === 1 && (
+        <div className="wizard-slide wizard-slide-features">
+          <div className="wizard-title">Bikin Ruangan Sendiri,<br />Atur Aturannya.</div>
+          <div className="wizard-features">
+            <div className="wizard-feature">
+              <div className="wf-icon">⚡</div>
+              <div className="wf-title">Realtime Chat</div>
+              <div className="wf-desc">Pesan masuk instan, langsung kebales.</div>
+            </div>
+            <div className="wizard-feature">
+              <div className="wf-icon">🔒</div>
+              <div className="wf-title">Room Privat</div>
+              <div className="wf-desc">Password + undang temen yang lo mau.</div>
+            </div>
+            <div className="wizard-feature">
+              <div className="wf-icon">🎮</div>
+              <div className="wf-title">Command Klasik</div>
+              <div className="wf-desc">/join /me /kick — ngerasa kaya mIRC.</div>
+            </div>
+            <div className="wizard-feature">
+              <div className="wf-icon">👑</div>
+              <div className="wf-title">Role Lengkap</div>
+              <div className="wf-desc">Owner, Admin, Operator, Voice.</div>
+            </div>
+          </div>
+          <div className="wizard-cta">
+            <button className="wizard-back" onClick={() => setStep(0)}>⬅ Kembali</button>
+            <button className="btn-primary btn-big" onClick={() => setStep(2)}>Lanjut ➜</button>
+          </div>
         </div>
+      )}
+
+      {/* SLIDE 2 — form login/daftar (fungsi SAMA kayak sebelumnya) */}
+      {step === 2 && (
+        <div className="auth-card wizard-form">
+          <div className="wizard-form-title">Daftarnya 1 Menit.<br />Ngobrolnya Seharian.</div>
+          <form onSubmit={submit} className="auth-form">
+            {mode === "signup" && (
+              <>
+                <label>Nama Tampilan
+                  <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" />
+                </label>
+                <label>Nomor HP
+                  <input value={ph} onChange={e => setPh(e.target.value)} placeholder="08xxxxxxxxxx (opsional)" inputMode="tel" />
+                </label>
+                <div className="privacy-note">🔒 Nomor HP cuma buat lo, ga bakal ditampilkan ke user lain</div>
+              </>
+            )}
+            <label>Username
+              <input value={u} onChange={e => setU(e.target.value)} required autoFocus={mode === "login"} />
+            </label>
+            <label>Password
+              <input type="password" value={p} onChange={e => setP(e.target.value)} required minLength={6} />
+            </label>
+            {err && <div className="auth-error">{err}</div>}
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? "…" : mode === "login" ? "Masuk" : "Buat Akun"}
+            </button>
+          </form>
+          <div className="auth-switch">
+            {mode === "login"
+              ? <>Belum punya akun? <button onClick={() => setMode("signup")}>Daftar</button></>
+              : <>Udah punya akun? <button onClick={() => setMode("login")}>Masuk</button></>
+            }
+          </div>
+          <div className="wizard-reassure">Bebas. Ga ada iklan. Ga ada tracking.</div>
+        </div>
+      )}
+
+      {/* dots navigasi */}
+      <div className="wizard-dots">
+        <button className={`wizard-dot ${step === 0 ? "active" : ""}`} onClick={() => setStep(0)} aria-label="Slide 1" />
+        <button className={`wizard-dot ${step === 1 ? "active" : ""}`} onClick={() => setStep(1)} aria-label="Slide 2" />
+        <button className={`wizard-dot ${step === 2 ? "active" : ""}`} onClick={() => setStep(2)} aria-label="Slide 3" />
       </div>
     </div>
   );
