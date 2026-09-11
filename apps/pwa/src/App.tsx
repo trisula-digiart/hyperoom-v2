@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { api, signup, login, logout, getToken, getUser, setUser } from "./api";
+import { api, signup, login, logout, getToken, getUser, setUser, resolveUrl } from "./api";
 import { useRealtime, type WsEvent } from "./useRealtime";
 import "./App.css";
 
@@ -801,7 +801,7 @@ export default function App() {
                 {onlineUsers.filter(u => u.onlineNow).map(u => (
                   <div key={u.id} className="member-item" onClick={() => fetchProfile(u.id)}>
                     <div className="member-avatar" style={{ background: nickColor(u.id) }}>
-                      {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="member-avatar-img" /> : <span>{(u.displayName || u.username)[0].toUpperCase()}</span>}
+                      {u.avatarUrl ? <img src={resolveUrl(u.avatarUrl)} alt="" className="member-avatar-img" /> : <span>{(u.displayName || u.username)[0].toUpperCase()}</span>}
                       <span className="member-dot online" />
                     </div>
                     <div className="member-name" style={{ color: nickColor(u.id) }}>
@@ -840,7 +840,7 @@ export default function App() {
                         return (
                           <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)} style={{position: "relative"}}>
                             <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
-                              {m.avatarUrl ? <img src={m.avatarUrl} alt="" className="member-avatar-img" /> : <span>{nick[0].toUpperCase()}</span>}
+                              {m.avatarUrl ? <img src={resolveUrl(m.avatarUrl)} alt="" className="member-avatar-img" /> : <span>{nick[0].toUpperCase()}</span>}
                               <span className={`member-dot ${isOnline ? "online" : ""}`} />
                             </div>
                             <div className="member-name" style={{ color: nickColor(m.userId) }}>
@@ -935,7 +935,7 @@ export default function App() {
           <div className="modal profile-modal" onClick={e => e.stopPropagation()}>
             <div className="profile-head">
                 {profileUser.avatarUrl
-                  ? <img src={profileUser.avatarUrl} alt="avatar" className="profile-avatar" />
+                  ? <img src={resolveUrl(profileUser.avatarUrl)} alt="avatar" className="profile-avatar" />
                   : <div className="profile-avatar profile-avatar-ph" style={{ background: nickColor(profileUser.id) }}>{profileUser.username[0].toUpperCase()}</div>
                 }
                 <div className="profile-head-info">

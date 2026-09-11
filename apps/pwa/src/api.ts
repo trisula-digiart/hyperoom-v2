@@ -2,6 +2,14 @@
 // BASE dari env (build-time) — kalau kosong, same-origin (dev/localhost)
 const BASE = (import.meta as any).env?.VITE_API_BASE || "";
 
+// resolve URL yang relatif ke backend (avatars dll) pakai BASE
+export function resolveUrl(path: string): string {
+  if (!path) return path;
+  if (path.startsWith("http")) return path;
+  if (!BASE) return path;
+  return BASE + path;
+}
+
 let token: string | null = localStorage.getItem("h2_token");
 let user: { id: string; username: string; displayName?: string } | null = null;
 
