@@ -156,10 +156,10 @@ app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
     if (!role) return res.status(403).json({ error: "ruangan terkunci, undangan diperlukan" });
   }
   const member = await joinRoom(room.id, req2.userId);
-  // real join event: system message + broadcast
+  // real join event: system message (mIRC style) + broadcast
   const user = await findUserById(req2.userId);
-  const nick = user?.display_name || user?.username || "seseorang";
-  const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} gabung ke ${room.name}`, "system");
+  const nick = user?.display_name || user?.username || "someone";
+  const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} has joined ${room.name}`, "system");
   realtime.broadcastToRoom(room.id, { type: "room:join", roomId: room.id, member });
   realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
   res.json({ room, member });
@@ -170,8 +170,8 @@ app.post("/api/rooms/:id/leave", requireAuth, async (req, res) => {
   const room = await findRoomById(req.params.id);
   if (room) {
     const user = await findUserById(req2.userId);
-    const nick = user?.display_name || user?.username || "seseorang";
-    const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} keluar dari ${room.name}`, "system");
+    const nick = user?.display_name || user?.username || "someone";
+    const sysMsg = await insertMessage(room.id, req2.userId, `*** ${nick} has left ${room.name}`, "system");
     realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
   }
   await leaveRoom(req.params.id, req2.userId);
@@ -227,8 +227,8 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
       await joinRoom(req.params.id, req2.userId);
       role = "member";
       const user = await findUserById(req2.userId);
-      const nick = user?.display_name || user?.username || "seseorang";
-      const sysMsg = await insertMessage(req.params.id, req2.userId, `*** ${nick} gabung ke ${room.name}`, "system");
+      const nick = user?.display_name || user?.username || "someone";
+      const sysMsg = await insertMessage(req.params.id, req2.userId, `*** ${nick} has joined ${room.name}`, "system");
       realtime.broadcastToRoom(req.params.id, { type: "room:join", roomId: req.params.id, member: { roomId: req.params.id, userId: req2.userId, role: "member", joinedAt: new Date().toISOString() } });
       realtime.broadcastToRoom(req.params.id, { type: "message:new", message: sysMsg });
     } else {
