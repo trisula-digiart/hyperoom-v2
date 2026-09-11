@@ -640,6 +640,11 @@ export default function App() {
       setRooms(prev => prev.find(x => x.id === r.room.id) ? prev : [...prev, r.room]);
       setActiveRoom(r.room);
       setProfileUser(null);
+      // langsung resolve partner DM biar nama asli muncul
+      api<{ partner: { id: string; username: string; displayName: string | null } }>("GET", `/api/rooms/${r.room.id}/dm-partner`)
+        .then(res => { if (res.partner) setDmPartners(prev => ({ ...prev, [r.room.id]: res.partner })); })
+        .catch(() => {});
+      setMobileTab("chat");
     } catch (err) { alert((err as Error).message); }
   };
 
