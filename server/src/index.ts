@@ -279,6 +279,35 @@ app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
   res.json({ room: updated });
 });
 
+// ---------- USERS ONLINE (global directory for invite) ----------
+app.get("/api/users/online", requireAuth, async (req, res) => {
+  const users = await pools.core.query(
+    `SELECT u.id, u.username, u.display_name, u.platform_role, u.status,
+            (u.last_seen_at > now() - interval '5 minutes') AS online_now
+     FROM public.users u ORDER BY u.username`
+  );
+  const rooms = await pools.core.query(`SELECT id, name FROM public.rooms`);
+  const memberships = await pools.core.query(
+    `SELECT m.user_id, r.name, m.role FROM room_members m JOIN rooms r ON r.id = m.room_id`
+  );
+  const roomNameById = new Map(rooms.rows.map((r) => [r.id, r.name]));
+  const membershipByUser = new Map<string, { name: string; role: string }[]>();
+  for (const m of memberships.rows) {
+    if (!membershipByUser.has(m.user_id)) membershipByUser.set(m.user_id, []);
+    membershipByUser.get(m.user_id)!.push({ name: roomNameById.get(m.room_id) || "?", role: m.role });
+  }
+  res.json({
+    users: users.rows.map((u) => ({
+      id: u.id,
+      username: u.username,
+      displayName: u.display_name,
+      platformRole: u.platform_role,
+      onlineNow: u.online_now,
+      rooms: membershipByUser.get(u.id) || [],
+    })),
+  });
+});
+
 // ---------- INVITES ----------
 app.post("/api/rooms/:id/invite", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };

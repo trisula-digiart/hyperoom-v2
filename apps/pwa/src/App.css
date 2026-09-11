@@ -213,6 +213,28 @@ body { height: 100vh; overflow: hidden; }
 .guide-item b { color: var(--accent); }
 .guide-item code { background: var(--accent-light); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 .lobby-tip { margin-top: 18px; font-size: 12px; color: var(--text-dim); background: var(--accent-light); padding: 8px 18px; border-radius: 20px; }
+.lobby-tutorial { width: 100%; max-width: 520px; }
+.tut-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--accent); margin-bottom: 10px; text-align: center;
+}
+
+/* Invite */
+.invite-btn { font-size: 13px; }
+.invite-modal { width: 420px; max-height: 80vh; display: flex; flex-direction: column; }
+.invite-msg { font-size: 12px; padding: 6px 10px; border-radius: 6px; background: rgba(34,197,94,0.12); color: var(--success); margin-bottom: 8px; }
+.invite-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.invite-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; }
+.invite-item:hover { background: rgba(0,0,0,0.04); }
+.invite-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; }
+.invite-sub { font-size: 11px; color: var(--text-dim); font-weight: 400; }
+.btn-invite-sm {
+  background: var(--accent); color: #fff; border: none; border-radius: 6px;
+  padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.btn-invite-sm:hover { background: var(--accent-hover); }
+.invite-state { font-size: 11px; color: var(--success); font-weight: 600; }
+.online-global { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
 .member-count { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* Messages */

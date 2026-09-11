@@ -145,7 +145,7 @@ export async function listRoomsForUser(userId: string): Promise<Room[]> {
   const r = await pools.core.query<RoomRow>(
     `SELECT r.* FROM public.rooms r
      LEFT JOIN public.room_members m ON m.room_id = r.id AND m.user_id = $1
-     WHERE r.type = 'public' OR m.user_id IS NOT NULL
+     WHERE r.type = 'public' OR r.type = 'private' OR m.user_id IS NOT NULL
      ORDER BY r.is_lobby DESC, r.name`,
     [userId]
   );

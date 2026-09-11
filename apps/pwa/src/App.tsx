@@ -155,6 +155,9 @@ export default function App() {
   const [joinError, setJoinError] = useState("");
   const [profileUser, setProfileUser] = useState<any>(null);
   const [profileError, setProfileError] = useState("");
+  const [inviteModal, setInviteModal] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [inviteMsg, setInviteMsg] = useState("");
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -344,6 +347,25 @@ export default function App() {
     } catch (err) { setProfileError((err as Error).message); setProfileUser(null); }
   };
 
+  const fetchOnlineUsers = async () => {
+    try {
+      const r = await api<{ users: any[] }>("GET", "/api/users/online");
+      setOnlineUsers(r.users);
+    } catch {}
+  };
+  const openInvite = async () => {
+    await fetchOnlineUsers();
+    setInviteModal(true); setInviteMsg("");
+  };
+  const sendInvite = async (username: string) => {
+    if (!activeRoom) return;
+    try {
+      const r = await api<{ message: string }>("POST", `/api/rooms/${activeRoom.id}/invite`, { username });
+      setInviteMsg(`✅ ${r.message}`);
+      await fetchOnlineUsers();
+    } catch (err) { setInviteMsg(`❌ ${(err as Error).message}`); }
+  };
+
   const rolePrefix = (role: string) => {
     switch (role) {
       case "owner": return "@";
@@ -444,6 +466,9 @@ export default function App() {
           </div>
           <div className="main-header-right">
             <span className="member-count">{members.length} anggota</span>
+            {(user?.id === activeRoom?.ownerId || members.find(m => m.userId === user?.id)?.role === "admin") && (
+              <button className="btn-link invite-btn" onClick={openInvite}>✉️ Undang</button>
+            )}
             {user?.id === activeRoom?.ownerId && (
               <button className="btn-link" onClick={openTopicModal} title="Ubah topik">✎ topik</button>
             )}
@@ -459,11 +484,16 @@ export default function App() {
               <div className="lobby-icon">🏠</div>
               <h2>Selamat datang di {activeRoom.name.replace("#","")}!</h2>
               <p>Ayo ngobrol seru, ilmu dapet, temen dapet, gebetan dapet ❤️</p>
-              <div className="lobby-guide">
-                <div className="guide-item"><span>📌</span><div><b>Gabung room</b> — klik room di sebelah kiri (🔒 = privat, butuh password/undangan)</div></div>
-                <div className="guide-item"><span>✚</span><div><b>Buat room</b> — klik ＋ di samping SALURAN, isi nama/status/password</div></div>
-                <div className="guide-item"><span>⌨️</span><div><b>Command</b> — ketik <code>/help</code> untuk semua perintah (join, nick, me, topic, whois)</div></div>
-                <div className="guide-item"><span>👤</span><div><b>Profil</b> — klik user di daftar ANGGOTA untuk lihat profil & kirim pesan</div></div>
+              <div className="lobby-tutorial">
+                <div className="tut-title">📖 CARA PAKAI APLIKASI (singkat)</div>
+                <div className="lobby-guide">
+                  <div className="guide-item"><span>1️⃣</span><div><b>Gabung room</b> — klik room di kiri. Room <b>🔒 privat</b> minta password / harus diundang owner</div></div>
+                  <div className="guide-item"><span>2️⃣</span><div><b>Buat room sendiri</b> — klik <b>＋</b> di samping SALURAN → isi nama, pilih Public/Private (private = password)</div></div>
+                  <div className="guide-item"><span>3️⃣</span><div><b>Undang teman</b> — buka room privat kamu → klik <b>✉️ Undang</b> → pilih user online → teman langsung bisa masuk tanpa password</div></div>
+                  <div className="guide-item"><span>4️⃣</span><div><b>Command /chat</b> — ketik <code>/help</code> liat semua: <code>/join</code> <code>/nick</code> <code>/me</code> <code>/topic</code> <code>/whois</code> <code>/ignore</code></div></div>
+                  <div className="guide-item"><span>5️⃣</span><div><b>Profil & avatar</b> — klik user di daftar ANGGOTA → lihat profil. Foto avatar bisa di-upload dari galeri HP/PC</div></div>
+                  <div className="guide-item"><span>6️⃣</span><div><b>Pesan sendiri</b> — muncul di kanan dengan bubble biru, pesan orang lain di kiri</div></div>
+                </div>
               </div>
               <div className="lobby-tip">💡 Kirim pesan pertama di sini buat nyapa semua orang!</div>
             </div>
@@ -552,6 +582,29 @@ export default function App() {
             );
           })}
           {members.length === 0 && <div className="sidebar-empty">no members</div>}
+
+          {/* Global online users — untuk invite */}
+          {(activeRoom?.type === "private" || activeRoom?.isLocked) && (
+            <div className="online-global">
+              <div className="member-group-label">💚 User Online (semua)</div>
+              {onlineUsers.filter(u => u.onlineNow && u.id !== user?.id).map(u => (
+                <div key={u.id} className="member-item">
+                  <div className="member-avatar" style={{ background: nickColor(u.id) }}>
+                    <span>{(u.displayName || u.username)[0].toUpperCase()}</span>
+                    <span className="member-dot online" />
+                  </div>
+                  <div className="member-name" style={{ color: nickColor(u.id) }}>
+                    {u.displayName || u.username}
+                  </div>
+                  {members.find(m => m.userId === u.id) ? (
+                    <span className="invite-state">di room</span>
+                  ) : (
+                    <button className="btn-invite-sm" onClick={() => sendInvite(u.username)}>Undang</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </aside>
 
@@ -585,6 +638,42 @@ export default function App() {
                 <button type="submit" className="btn-primary">Masuk</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Invite modal */}
+      {inviteModal && (
+        <div className="modal-overlay" onClick={() => setInviteModal(false)}>
+          <div className="modal invite-modal" onClick={e => e.stopPropagation()}>
+            <h3>✉️ Undang ke #{activeRoom?.name.slice(1)}</h3>
+            {inviteMsg && <div className="invite-msg">{inviteMsg}</div>}
+            <div className="invite-list">
+              {onlineUsers.filter(u => u.id !== user?.id).map(u => {
+                const inRoom = members.find(m => m.userId === u.id);
+                return (
+                  <div key={u.id} className="invite-item">
+                    <div className="member-avatar" style={{ background: nickColor(u.id) }}>
+                      <span>{(u.displayName || u.username)[0].toUpperCase()}</span>
+                      <span className={`member-dot ${u.onlineNow ? "online" : ""}`} />
+                    </div>
+                    <div className="invite-name">
+                      <div>{u.displayName || u.username}</div>
+                      <div className="invite-sub">{u.onlineNow ? "online" : "offline"} • {u.rooms?.length || 0} room</div>
+                    </div>
+                    {inRoom ? (
+                      <span className="invite-state">di room</span>
+                    ) : (
+                      <button className="btn-invite-sm" onClick={() => sendInvite(u.username)}>Undang</button>
+                    )}
+                  </div>
+                );
+              })}
+              {onlineUsers.filter(u => u.id !== user?.id).length === 0 && <div className="empty">belum ada user</div>}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" onClick={() => setInviteModal(false)}>Tutup</button>
+            </div>
           </div>
         </div>
       )}
