@@ -86,14 +86,21 @@ app.post("/api/auth/signup", async (req, res) => {
   if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ error: "nickname hanya huruf, angka, underscore" });
   if (phone && !/^[0-9+\-\s]{8,16}$/.test(phone)) return res.status(400).json({ error: "nomor HP tidak valid" });
   try {
+    // Cek nickname dulu (sebelum INSERT)
     const existing = await findUserByUsername(username);
-    if (existing) return res.status(409).json({ error: "nickname sudah dipakai" });
+    if (existing) return res.status(409).json({ error: `nickname "${username}" sudah dipakai` });
+
+    // Cek HP dulu kalau diisi (sebelum INSERT, biar pesan spesifik)
+    if (phone) {
+      const dup = await pools.core.query(`SELECT 1 FROM public.users WHERE phone = $1`, [phone.trim()]);
+      if ((dup.rowCount ?? 0) > 0) return res.status(409).json({ error: `nomor HP "${phone}" sudah didaftarkan sebelumnya` });
+    }
+
     const hash = await hashPassword(password);
     const profile = await createUser(username, hash, displayName, phone);
     const token = signToken({ id: profile.id, username: profile.username, displayName: profile.displayName ?? null, avatarUrl: profile.avatarUrl ?? null, platformRole: profile.platformRole });
     res.status(201).json({ token, user: { id: profile.id, username: profile.username, displayName: profile.displayName ?? undefined, platformRole: profile.platformRole, createdAt: profile.createdAt } });
   } catch (err) {
-    if ((err as { code?: string }).code === "23505") return res.status(409).json({ error: "nickname atau nomor HP sudah dipakai" });
     res.status(500).json({ error: (err as Error).message });
   }
 });
