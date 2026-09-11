@@ -298,6 +298,12 @@ export default function App() {
         });
     }).catch(() => setMessages([]));
     api<{ members: Member[] }>("GET", `/api/rooms/${activeRoom.id}/members`).then(r => setMembers(r.members)).catch(() => setMembers([]));
+    // resolve partner DM (nama asli) kalau room DM
+    if (activeRoom.type === "dm" && !dmPartners[activeRoom.id]) {
+      api<{ partner: { id: string; username: string; displayName: string | null } }>("GET", `/api/rooms/${activeRoom.id}/dm-partner`)
+        .then(res => { if (res.partner) setDmPartners(prev => ({ ...prev, [activeRoom.id]: res.partner })); })
+        .catch(() => {});
+    }
     inputRef.current?.focus();
   }, [activeRoom]);
 

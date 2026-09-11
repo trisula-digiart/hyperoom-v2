@@ -236,6 +236,13 @@ app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
     return;
   }
 
+  // DM room: pasangan (bukan owner) otomatis boleh join
+  if (room.type === "dm") {
+    const member = await joinRoom(room.id, req2.userId);
+    res.json({ room, member });
+    return;
+  }
+
   // private room: butuh password ATAU invite
   if (room.type === "private") {
     const pwHash = await getRoomPasswordHash(room.id);
@@ -591,15 +598,18 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   if (muted) return res.status(403).json({ error: "kamu di-mute di room ini" });
   let role = await getMemberRole(req.params.id, req2.userId);
   if (!role) {
-    // Auto-join public room when posting (real membership) — idempotent
-    if (room.type === "public" && !room.isLocked) {
+    // Auto-join: public & dm room (DM = salah satu pasangan), idempotent
+    const canAutoJoin = room.type === "public" || room.type === "dm" || (room.type === "private" && await hasInvite(room.id, req2.userId));
+    if (canAutoJoin && (!room.isLocked || room.type === "dm")) {
       await joinRoom(req.params.id, req2.userId);
       role = "member";
       const user = await findUserById(req2.userId);
       const nick = user?.display_name || user?.username || "someone";
-      const sysMsg = await insertMessage(req.params.id, req2.userId, `*** ${nick} has joined ${room.name}`, "system");
+      if (room.type !== "dm") {
+        const sysMsg = await insertMessage(req.params.id, req2.userId, `*** ${nick} has joined ${room.name}`, "system");
+        realtime.broadcastToRoom(req.params.id, { type: "message:new", message: sysMsg });
+      }
       realtime.broadcastToRoom(req.params.id, { type: "room:join", roomId: req.params.id, member: { roomId: req.params.id, userId: req2.userId, role: "member", joinedAt: new Date().toISOString() } });
-      realtime.broadcastToRoom(req.params.id, { type: "message:new", message: sysMsg });
     } else {
       return res.status(403).json({ error: "not a member of this room" });
     }
