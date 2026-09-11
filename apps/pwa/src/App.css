@@ -297,6 +297,15 @@ body { height: 100vh; overflow: hidden; }
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
   color: var(--text-dim); padding: 4px 8px; margin-bottom: 2px;
 }
+.member-group-label.clickable { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.member-group-label.clickable:hover { color: var(--accent); }
+.group-count { font-size: 10px; color: var(--muted, var(--text-dim)); font-weight: 600; }
+.caret { margin-left: auto; font-size: 11px; }
+.group-body { padding-left: 4px; }
+.sub-role-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text-dim); padding: 6px 8px 2px; opacity: 0.85;
+}
 .member-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; }
 .member-item:hover { background: rgba(0,0,0,0.04); }
 .member-avatar {

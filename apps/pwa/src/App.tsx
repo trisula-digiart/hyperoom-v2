@@ -158,6 +158,8 @@ export default function App() {
   const [inviteModal, setInviteModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [inviteMsg, setInviteMsg] = useState("");
+  const [expandGlobal, setExpandGlobal] = useState(true);
+  const [expandRoom, setExpandRoom] = useState(true);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -191,6 +193,14 @@ export default function App() {
 
   // scroll to bottom on new message
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // poll online users (global directory) every 10s
+  useEffect(() => {
+    if (!user) return;
+    fetchOnlineUsers();
+    const iv = setInterval(fetchOnlineUsers, 10000);
+    return () => clearInterval(iv);
+  }, [user, activeRoom]);
 
   // handle ws events
   const handleWsEvent = useCallback((evt: WsEvent) => {
@@ -552,59 +562,73 @@ export default function App() {
 
       {/* ---- RIGHT SIDEBAR ---- */}
       <aside className="sidebar-right">
-        <div className="sidebar-heading">Anggota ({members.length})</div>
         <div className="member-list">
-          {(["owner", "admin", "operator", "voice", "member"] as const).map(role => {
-            const group = members.filter(m => m.role === role);
-            if (group.length === 0) return null;
-            const roleLabel: Record<string, string> = { owner: "Pemilik", admin: "Admin", operator: "Operator", voice: "Voice", member: "Anggota" };
-            return (
-              <div key={role} className="member-group">
-                <div className="member-group-label">{roleLabel[role]} ({group.length})</div>
-                {group.map(m => {
-                  const pres = presenceMap.get(m.userId);
-                  const isOnline = pres?.status === "online";
-                  const nick = m.displayName || m.username || shortId(m.userId);
-                  const prefix = m.role !== "member" ? rolePrefix(m.role) : "";
+          {/* Anggota Hyperoom — semua user online (global) */}
+          <div className="member-group">
+            <div className="member-group-label clickable" onClick={() => setExpandGlobal(!expandGlobal)}>
+              👥 Anggota Hyperoom <span className="group-count">({onlineUsers.filter(u => u.onlineNow).length} online)</span>
+              <span className="caret">{expandGlobal ? "▾" : "▸"}</span>
+            </div>
+            {expandGlobal && (
+              <div className="group-body">
+                {onlineUsers.filter(u => u.onlineNow).map(u => (
+                  <div key={u.id} className="member-item" onClick={() => fetchProfile(u.id)}>
+                    <div className="member-avatar" style={{ background: nickColor(u.id) }}>
+                      <span>{(u.displayName || u.username)[0].toUpperCase()}</span>
+                      <span className="member-dot online" />
+                    </div>
+                    <div className="member-name" style={{ color: nickColor(u.id) }}>
+                      {u.displayName || u.username}
+                    </div>
+                    {activeRoom && (activeRoom.type === "private" || activeRoom.isLocked) && !members.find(m => m.userId === u.id) && (
+                      <button className="btn-invite-sm" onClick={(e) => { e.stopPropagation(); sendInvite(u.username); }}>Undang</button>
+                    )}
+                  </div>
+                ))}
+                {onlineUsers.filter(u => u.onlineNow).length === 0 && <div className="sidebar-empty">ga ada yang online</div>}
+              </div>
+            )}
+          </div>
+
+          {/* Anggota Room — anggota online di room ini */}
+          <div className="member-group">
+            <div className="member-group-label clickable" onClick={() => setExpandRoom(!expandRoom)}>
+              🏠 Anggota Room <span className="group-count">({members.length})</span>
+              <span className="caret">{expandRoom ? "▾" : "▸"}</span>
+            </div>
+            {expandRoom && (
+              <div className="group-body">
+                {(["owner", "admin", "operator", "voice", "member"] as const).map(role => {
+                  const group = members.filter(m => m.role === role);
+                  if (group.length === 0) return null;
+                  const roleLabel: Record<string, string> = { owner: "Pemilik", admin: "Admin", operator: "Operator", voice: "Voice", member: "Anggota" };
                   return (
-                    <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)}>
-                      <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
-                        <span>{nick[0].toUpperCase()}</span>
-                        <span className={`member-dot ${isOnline ? "online" : ""}`} />
-                      </div>
-                      <div className="member-name" style={{ color: nickColor(m.userId) }}>
-                        <span className={`role-prefix ${m.role}`}>{prefix}</span>{nick}
-                      </div>
+                    <div key={role}>
+                      <div className="sub-role-label">{roleLabel[role]} ({group.length})</div>
+                      {group.map(m => {
+                        const pres = presenceMap.get(m.userId);
+                        const isOnline = pres?.status === "online";
+                        const nick = m.displayName || m.username || shortId(m.userId);
+                        const prefix = m.role !== "member" ? rolePrefix(m.role) : "";
+                        return (
+                          <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)}>
+                            <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
+                              <span>{nick[0].toUpperCase()}</span>
+                              <span className={`member-dot ${isOnline ? "online" : ""}`} />
+                            </div>
+                            <div className="member-name" style={{ color: nickColor(m.userId) }}>
+                              <span className={`role-prefix ${m.role}`}>{prefix}</span>{nick}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
+                {members.length === 0 && <div className="sidebar-empty">belum ada anggota</div>}
               </div>
-            );
-          })}
-          {members.length === 0 && <div className="sidebar-empty">no members</div>}
-
-          {/* Global online users — untuk invite */}
-          {(activeRoom?.type === "private" || activeRoom?.isLocked) && (
-            <div className="online-global">
-              <div className="member-group-label">💚 User Online (semua)</div>
-              {onlineUsers.filter(u => u.onlineNow && u.id !== user?.id).map(u => (
-                <div key={u.id} className="member-item">
-                  <div className="member-avatar" style={{ background: nickColor(u.id) }}>
-                    <span>{(u.displayName || u.username)[0].toUpperCase()}</span>
-                    <span className="member-dot online" />
-                  </div>
-                  <div className="member-name" style={{ color: nickColor(u.id) }}>
-                    {u.displayName || u.username}
-                  </div>
-                  {members.find(m => m.userId === u.id) ? (
-                    <span className="invite-state">di room</span>
-                  ) : (
-                    <button className="btn-invite-sm" onClick={() => sendInvite(u.username)}>Undang</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </aside>
 
