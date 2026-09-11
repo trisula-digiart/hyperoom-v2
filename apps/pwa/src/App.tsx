@@ -145,6 +145,7 @@ export default function App() {
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [wsConnected, setWsConnected] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -221,51 +222,26 @@ export default function App() {
     const raw = input.trim();
     setInput("");
 
-    // handle local commands
+    // handle commands via backend engine (real execution)
     if (raw.startsWith("/")) {
-      const parts = raw.split(/\s+/);
-      const cmd = parts[0].toLowerCase();
-      const rest = parts.slice(1).join(" ");
-
-      if (cmd === "/help") {
+      try {
+        const res = await api<{ ok: boolean; reply?: string; roomId?: string }>("POST", "/api/commands", { input: raw, roomId: activeRoom.id });
+        if (res.reply) {
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
+            kind: "system", content: res.reply,
+            createdAt: new Date().toISOString()
+          }]);
+        }
+        // refresh rooms if join/part happened
+        api<{ rooms: Room[] }>("GET", "/api/rooms").then(r => { setRooms(r.rooms); }).catch(() => {});
+      } catch (err) {
         setMessages(prev => [...prev, {
           id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
-          kind: "system", content: [
-            "/join #ruangan — gabung ke ruangan",
-            "/part #ruangan — keluar dari ruangan",
-            "/me aksi — kirim aksi (/me lambai)",
-            "/nick nama — ganti nama tampilan",
-            "/whois user — intip profil user",
-            "/topic teks — set topik ruangan",
-            "/quit — putus koneksi",
-          ].join(" │ "),
+          kind: "system", content: `Gagal: ${(err as Error).message}`,
           createdAt: new Date().toISOString()
         }]);
-        return;
       }
-      if (cmd === "/nick" && rest) {
-        try { await api("PATCH", "/api/me/nick", { displayName: rest }); }
-        catch {}
-        return;
-      }
-      if (cmd === "/me") {
-        try {
-          const r = await api<{ message: Message }>("POST", `/api/rooms/${activeRoom.id}/messages`, { content: raw, kind: "action" });
-          // optimistic
-        } catch {}
-        return;
-      }
-      if (cmd === "/topic" && activeRoom.ownerId === user?.id) {
-        try { await api("PATCH", `/api/rooms/${activeRoom.id}`, { topic: rest }); setActiveRoom(r2 => r2 && { ...r2, topic: rest }); }
-        catch {}
-        return;
-      }
-      // /help fallback
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(), roomId: activeRoom.id, authorId: "system",
-        kind: "system", content: `Perintah ga dikenal: ${cmd}. Ketik /help buat liat daftar perintah.`,
-        createdAt: new Date().toISOString()
-      }]);
       return;
     }
 
@@ -321,6 +297,24 @@ export default function App() {
       case "voice": return "+";
       default: return "";
     }
+  };
+
+  // autocomplete commands
+  const ALL_COMMANDS = ["join", "part", "nick", "me", "topic", "whois", "ignore", "unignore", "help", "clear", "query", "msg"];
+  const handleInputChange = (v: string) => {
+    setInput(v);
+    if (v.startsWith("/")) {
+      const typed = v.slice(1).toLowerCase();
+      const matches = typed ? ALL_COMMANDS.filter(c => c.startsWith(typed)) : [];
+      setSuggestions(matches.slice(0, 5));
+    } else {
+      setSuggestions([]);
+    }
+  };
+  const applySuggestion = (c: string) => {
+    setInput(`/${c} `);
+    setSuggestions([]);
+    inputRef.current?.focus();
   };
 
   if (!user) return <AuthScreen onAuthed={setSUser} />;
@@ -421,14 +415,23 @@ export default function App() {
 
         <form className="input-bar" onSubmit={handleSend}>
           <span className="input-prefix">{activeRoom ? `#${activeRoom.name.slice(1)}` : ""}</span>
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder={activeRoom ? `Ketik pesan atau /help buat liat perintah…` : "Pilih ruangan dulu"}
-            disabled={!activeRoom}
-            autoFocus
-          />
+          <div className="input-wrap">
+            {suggestions.length > 0 && (
+              <div className="autocomplete">
+                {suggestions.map(c => (
+                  <div key={c} className="ac-item" onClick={() => applySuggestion(c)}>/{c}</div>
+                ))}
+              </div>
+            )}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={e => handleInputChange(e.target.value)}
+              placeholder={activeRoom ? `Ketik pesan atau / bikin command…` : "Pilih ruangan dulu"}
+              disabled={!activeRoom}
+              autoFocus
+            />
+          </div>
           <button type="submit" className="btn-send" disabled={!input.trim() || !activeRoom}>▸</button>
         </form>
       </main>

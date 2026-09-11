@@ -14,6 +14,7 @@ import {
   setPresence, getPresence, touchUserSeen,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
+import { parseCommandLine, executeCommand } from "./commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -219,6 +220,17 @@ app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
   const sysMsg = await insertMessage(room.id, req2.userId, `Topik ruangan: ${room.topic ?? "(kosong)"}`, "system");
   realtime.broadcastToRoom(room.id, { type: "message:new", message: sysMsg });
   res.json({ room: updated });
+});
+
+// ---------- COMMANDS (IRC engine) ----------
+app.post("/api/commands", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const { input } = req.body || {};
+  if (!input || typeof input !== "string") return res.status(400).json({ error: "input required" });
+  const cmd = parseCommandLine(input);
+  if (!cmd) return res.status(400).json({ error: "bukan command (tanpa /)" });
+  const result = await executeCommand({ userId: req2.userId, realtime, currentRoomId: req.body.roomId || null }, cmd);
+  res.json(result);
 });
 
 // ---------- MESSAGES ----------

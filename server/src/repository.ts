@@ -43,6 +43,43 @@ export async function findUserByUsername(username: string): Promise<DbUser | nul
   return r.rows[0] ?? null;
 }
 
+export async function findUserByNickname(nick: string): Promise<DbUser | null> {
+  const r = await pools.core.query<DbUser>(
+    `SELECT * FROM public.users WHERE username = $1 OR display_name = $1`,
+    [nick]
+  );
+  return r.rows[0] ?? null;
+}
+
+// ---------- IGNORE (core) ----------
+
+export async function setDisplayName(userId: string, displayName: string): Promise<void> {
+  await pools.core.query(`UPDATE public.users SET display_name = $2, updated_at = now() WHERE id = $1`, [userId, displayName]);
+}
+
+export async function addIgnore(userId: string, ignoredUserId: string): Promise<void> {
+  await pools.core.query(
+    `INSERT INTO public.user_ignores (user_id, ignored_user_id) VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, ignoredUserId]
+  );
+}
+
+export async function removeIgnore(userId: string, ignoredUserId: string): Promise<void> {
+  await pools.core.query(
+    `DELETE FROM public.user_ignores WHERE user_id = $1 AND ignored_user_id = $2`,
+    [userId, ignoredUserId]
+  );
+}
+
+export async function listIgnores(userId: string): Promise<string[]> {
+  const r = await pools.core.query<{ ignored_user_id: string }>(
+    `SELECT ignored_user_id FROM public.user_ignores WHERE user_id = $1`,
+    [userId]
+  );
+  return r.rows.map((x) => x.ignored_user_id);
+}
+
 export async function findUserById(id: string): Promise<DbUser | null> {
   const r = await pools.core.query<DbUser>(`SELECT * FROM public.users WHERE id = $1`, [id]);
   return r.rows[0] ?? null;
