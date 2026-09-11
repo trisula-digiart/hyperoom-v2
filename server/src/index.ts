@@ -685,13 +685,21 @@ app.get("/api/admin/overview", async (req, res) => {
   }
 });
 
-// Dashboard static (premium, bright — consistent with app)
-app.use(express.static(path.join(__dirname, "..", "public"), {
-  setHeaders: (res) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  },
+// ---------- STATIC (PWA app + dashboard) ----------
+// PWA app di / (dari build apps/pwa/dist)
+const PWA_DIST = path.join("H:", "TRISULA_DIGIART", "hyperoom-v2", "apps", "pwa", "dist");
+app.use(express.static(PWA_DIST, {
+  setHeaders: (res) => res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"),
 }));
 app.get("/", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  res.sendFile(path.join(PWA_DIST, "index.html"));
+});
+// dashboard monitor di /dashboard
+app.use("/dashboard", express.static(path.join(__dirname, "..", "public"), {
+  setHeaders: (res) => res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"),
+}));
+app.get("/dashboard", (req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
