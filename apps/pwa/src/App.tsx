@@ -116,7 +116,7 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
         </div>
       )}
 
-      {/* SLIDE 1 — fitur */}
+      {/* SLIDE 1 — fitur + pilihan */}
       {step === 1 && (
         <div className="wizard-slide wizard-slide-features">
           <div className="wizard-title">Bikin Ruangan Sendiri,<br />Atur Aturannya.</div>
@@ -142,9 +142,17 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
               <div className="wf-desc">Owner, Admin, Operator, Voice.</div>
             </div>
           </div>
-          <div className="wizard-cta">
+          <div className="wizard-choice">
+            <div className="wizard-choice-title">Udah punya akun atau baru gabung?</div>
+            <div className="wizard-choice-btns">
+              <button className="btn-secondary btn-big" onClick={() => { setMode("login"); setStep(2); }}>
+                🔑 Sudah Punya Akun<br /><span className="choice-sub">Langsung masuk</span>
+              </button>
+              <button className="btn-primary btn-big" onClick={() => { setMode("signup"); setStep(2); }}>
+                ✨ Belum Punya Akun<br /><span className="choice-sub">Daftar 1 menit</span>
+              </button>
+            </div>
             <button className="wizard-back" onClick={() => setStep(0)}>⬅ Kembali</button>
-            <button className="btn-primary btn-big" onClick={() => setStep(2)}>Lanjut ➜</button>
           </div>
         </div>
       )}
@@ -152,24 +160,28 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
       {/* SLIDE 2 — form login/daftar (fungsi SAMA kayak sebelumnya) */}
       {step === 2 && (
         <div className="auth-card wizard-form">
-          <div className="wizard-form-title">Daftarnya 1 Menit.<br />Ngobrolnya Seharian.</div>
+          <button className="wizard-back wizard-back-top" onClick={() => setStep(1)}>⬅ Kembali</button>
+          <div className="wizard-form-title">{mode === "login" ? "Selamat Datang Kembali! 👋" : "Daftarnya 1 Menit.<br />Ngobrolnya Seharian."}</div>
           <form onSubmit={submit} className="auth-form">
             {mode === "signup" && (
               <>
                 <label>Nama Tampilan
-                  <input value={d} onChange={e => setD(e.target.value)} placeholder="opsional" />
+                  <input value={d} onChange={e => setD(e.target.value)} placeholder="Contoh: Budi Santoso" />
+                  <span className="field-hint">Opsional — biar gampang dikenalin temen</span>
                 </label>
                 <label>Nomor HP
-                  <input value={ph} onChange={e => setPh(e.target.value)} placeholder="08xxxxxxxxxx (opsional)" inputMode="tel" />
+                  <input value={ph} onChange={e => setPh(e.target.value)} placeholder="08xxxxxxxxxx" inputMode="tel" />
+                  <span className="field-hint">Opsional — cuma buat keamanan akun, ga ditampilkan ke user lain</span>
                 </label>
-                <div className="privacy-note">🔒 Nomor HP cuma buat lo, ga bakal ditampilkan ke user lain</div>
               </>
             )}
             <label>Username
-              <input value={u} onChange={e => setU(e.target.value)} required autoFocus={mode === "login"} />
+              <input value={u} onChange={e => setU(e.target.value)} required autoFocus={mode === "login"} placeholder={mode === "login" ? "Nama yang lo daftarin dulu" : "Contoh: budi_ganteng"} />
+              <span className="field-hint">{mode === "login" ? "Pake nama yang lo daftarin waktu pertama gabung" : "Nama panggilan lo — 2–20 huruf/angka, ga bisa dipake orang lain"}</span>
             </label>
             <label>Password
-              <input type="password" value={p} onChange={e => setP(e.target.value)} required minLength={6} />
+              <input type="password" value={p} onChange={e => setP(e.target.value)} required minLength={6} placeholder="••••••••" />
+              <span className="field-hint">Minimal 6 karakter — rahasia, jangan kasih siapa-siapa ya</span>
             </label>
             {err && <div className="auth-error">{err}</div>}
             <button type="submit" className="btn-primary" disabled={loading}>
@@ -178,8 +190,8 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
           </form>
           <div className="auth-switch">
             {mode === "login"
-              ? <>Belum punya akun? <button onClick={() => setMode("signup")}>Daftar</button></>
-              : <>Udah punya akun? <button onClick={() => setMode("login")}>Masuk</button></>
+              ? <>Belum punya akun? <button onClick={() => setMode("signup")}>Daftar di sini</button></>
+              : <>Udah punya akun? <button onClick={() => setMode("login")}>Masuk di sini</button></>
             }
           </div>
           <div className="wizard-reassure">Bebas. Ga ada iklan. Ga ada tracking.</div>

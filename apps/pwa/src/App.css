@@ -75,6 +75,15 @@ body { height: 100vh; overflow: hidden; }
 .btn-big { padding: 14px 36px; font-size: 16px; border-radius: 12px; box-shadow: 0 6px 20px rgba(37,99,235,0.35); }
 .wizard-skip { background: none; border: none; color: var(--text-dim); font-size: 13px; cursor: pointer; text-decoration: underline; }
 .wizard-back { background: none; border: none; color: var(--text-dim); font-size: 13px; cursor: pointer; }
+.wizard-back-top { position: absolute; top: 14px; left: 16px; }
+.wizard-choice { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.wizard-choice-title { font-size: 14px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; }
+.wizard-choice-btns { display: flex; gap: 12px; width: 100%; justify-content: center; flex-wrap: wrap; }
+.btn-secondary { background: #fff; color: var(--accent); border: 2px solid var(--accent); border-radius: 12px; font-weight: 700; font-size: 15px; padding: 13px 20px; cursor: pointer; box-shadow: 0 4px 14px rgba(37,99,235,0.15); }
+.btn-secondary:hover { background: var(--accent-light); }
+.choice-sub { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; margin-top: 2px; }
+.field-hint { font-size: 11px; color: var(--text-dim); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.wizard-form { position: relative; }
 
 /* Slide fitur */
 .wizard-features { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 28px; }
