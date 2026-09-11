@@ -9,6 +9,7 @@ export default defineConfig({
       "/api": "http://localhost:3100",
       "/health": "http://localhost:3100",
       "/monitor": "http://localhost:3100",
+      "/avatars": "http://localhost:3100",
       "/realtime": {
         target: "ws://localhost:3100",
         ws: true,
