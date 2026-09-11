@@ -83,13 +83,6 @@ function AuthScreen({ onAuthed }: { onAuthed: (u: Profile) => void }) {
     }).catch(() => { setChecking(false); });
   }, []);
 
-  // auto-advance wizard (non-intrusif, berhenti di form)
-  useEffect(() => {
-    if (checking || step >= 2) return;
-    const t = setTimeout(() => setStep(s => Math.min(s + 1, 2)), 6000);
-    return () => clearTimeout(t);
-  }, [step, checking]);
-
   if (checking) return <BootLoader />;
 
   const submit = async (e: React.FormEvent) => {
