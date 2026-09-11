@@ -20,6 +20,7 @@ import {
   setAvatar, getAvatarPath, findLobbyRoom, autoJoinLobby,
   setMemberRole, banUser, unbanUser, isBanned, muteUser, unmuteUser, isMuted,
   findOrCreateDmRoom, addReaction, removeReaction, listReactions, listIgnores,
+  getDmPartner,
 } from "./repository.js";
 import { HyperoomRealtime } from "./realtime.js";
 import { parseCommandLine, executeCommand } from "./commands.js";
@@ -339,6 +340,13 @@ app.get("/api/users/online", requireAuth, async (req, res) => {
 });
 
 // ---------- INVITES ----------
+app.get("/api/rooms/:id/dm-partner", requireAuth, async (req, res) => {
+  const req2 = req as express.Request & { userId: string };
+  const partner = await getDmPartner(req.params.id, req2.userId);
+  if (!partner) return res.json({ partner: null });
+  res.json({ partner: { id: partner.id, username: partner.username, displayName: partner.displayName } });
+});
+
 app.post("/api/rooms/:id/invite", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const { username } = req.body || {};

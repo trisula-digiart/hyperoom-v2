@@ -227,7 +227,10 @@ export default function App() {
   const [inviteMsg, setInviteMsg] = useState("");
   const [expandGlobal, setExpandGlobal] = useState(true);
   const [expandRoom, setExpandRoom] = useState(true);
-  const [mobileTab, setMobileTab] = useState<"chat" | "members" | "dm">("chat"); // mobile bottom nav
+  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+  const [dmPartners, setDmPartners] = useState<Record<string, { id: string; username: string; displayName: string | null }>>({});
+  const [mobileTab, setMobileTab] = useState<"chat" | "rooms" | "members" | "dm">("chat");
+  const [isMobile, setIsMobile] = useState(false);
   const [reactionsMap, setReactionsMap] = useState<Record<string, any[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // roomId -> userIds
   const [unread, setUnread] = useState<Record<string, number>>({});
@@ -242,6 +245,14 @@ export default function App() {
   useEffect(() => { activeRoomRef.current = activeRoom?.id || null; }, [activeRoom]);
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
+  // detect mobile (<900px)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -253,6 +264,13 @@ export default function App() {
       if (cancelled) return;
       setRooms(r.rooms);
       setActiveRoom(prev => prev ?? r.rooms.find(x => x.isLobby) ?? r.rooms[0] ?? null);
+      // fetch DM partners buat nama asli
+      const dmRooms = r.rooms.filter(x => x.type === "dm");
+      dmRooms.forEach(room => {
+        api<{ partner: { id: string; username: string; displayName: string | null } }>("GET", `/api/rooms/${room.id}/dm-partner`)
+          .then(res => { if (res.partner) setDmPartners(prev => ({ ...prev, [room.id]: res.partner })); })
+          .catch(() => {});
+      });
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [user]);
@@ -294,11 +312,12 @@ export default function App() {
       return () => clearInterval(iv);
     }, [user, activeRoom]);
 
-    // fetch ignore list saat login
-    useEffect(() => {
-      if (!user) return;
-      api<{ ignoredUserIds: string[] }>("GET", "/api/me/ignores").then(r => setIgnoreList(r.ignoredUserIds)).catch(() => {});
-    }, [user]);
+    // fetch ignore list + avatar sendiri saat login
+      useEffect(() => {
+        if (!user) return;
+        api<{ ignoredUserIds: string[] }>("GET", "/api/me/ignores").then(r => setIgnoreList(r.ignoredUserIds)).catch(() => {});
+        api<{ user: any }>("GET", `/api/users/${user.id}`).then(r => setMyAvatarUrl(r.user.avatarUrl || null)).catch(() => {});
+      }, [user]);
 
     // edit/delete message
     const editMessage = async (msgId: string) => {
@@ -658,9 +677,226 @@ export default function App() {
   };
 
   const isProfileSelf = profileUser && user && profileUser.id === user?.id;
-  const unreadCount = Object.values(unread).reduce((a, b) => a + b, 0); // total unread buat badge nav
+  const resolveDmName = (room: Room): string => {
+  // 1. partner dari backend (nama asli)
+  const partner = dmPartners[room.id];
+  if (partner) return partner.displayName || partner.username;
+  // 2. fallback: onlineUsers match by id segmen
+  const idPart = room.name.replace("#dm-", "").split("-");
+  const match = onlineUsers.find(u => idPart.includes(u.id.slice(0, 8)));
+  if (match) return match.displayName || match.username;
+  // 3. fallback: members room (yang bukan diri sendiri)
+  if (room.type === "dm") {
+    const other = members.find(m => m.userId !== user?.id);
+    if (other) return other.displayName || other.username || other.userId.slice(0, 8);
+  }
+  return room.name.replace("#dm-", "").slice(0, 16);
+};
+  const unreadCount = Object.values(unread).reduce((a, b) => a + b, 0);
+  const headerName = activeRoom?.type === "dm" ? resolveDmName(activeRoom) : (activeRoom?.name?.slice(1) || "Hyperoom");
 
   if (!user) return <AuthScreen onAuthed={setSUser} />;
+
+  // ===== MOBILE LAYOUT (4 tab, clean, mobile-first) =====
+  if (isMobile) {
+    return (
+      <div className="mobile-app">
+        {/* Header: logo kecil + nama room aktif */}
+        <header className="mobile-header">
+          <img src="/logo.png" alt="Hyperoom" className="mobile-logo" />
+          <div className="mobile-header-mid">
+            <div className="mobile-room-name">{headerName}</div>
+            <div className="mobile-room-topic">{activeRoom?.topic || ""}</div>
+          </div>
+          <button className="mobile-profile-btn" onClick={async () => {
+            try {
+              const r = await api<{ user: any }>("GET", `/api/users/${user!.id}`);
+              setProfileUser(r.user);
+              setEditBio(r.user.bio || "");
+              setEditStatus(r.user.status || "");
+              setEditName(r.user.displayName || r.user.username || "");
+              setEditProfile(true);
+            } catch {
+              setProfileUser({ id: user!.id, username: user!.username, displayName: user!.displayName });
+              setEditProfile(true);
+            }
+          }} title="Profil & pengaturan">
+            <img
+              src={myAvatarUrl ? resolveUrl(myAvatarUrl) : "/logo.png"}
+              alt="profil"
+              className="mobile-profile-avatar"
+              onError={(e) => { (e.target as HTMLImageElement).src = "/logo.png"; }}
+            />
+          </button>
+          <button className="btn-link leave-btn" onClick={handleLeaveRoom}>keluar</button>
+        </header>
+
+        {/* ISIS: per tab */}
+        {mobileTab === "rooms" && (
+          <div className="mobile-tab-content mobile-rooms">
+            <div className="mobile-rooms-header">
+              <span>Saluran</span>
+              <button className="icon-btn" onClick={() => setShowCreateRoom(!showCreateRoom)}>＋</button>
+            </div>
+            {showCreateRoom && (
+              <form className="create-room" onSubmit={createRoom}>
+                <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="#nama-ruangan" autoFocus required />
+                <input value={newRoomTopic} onChange={e => setNewRoomTopic(e.target.value)} placeholder="Topik (opsional)" />
+                <div className="room-type-row">
+                  <label className={`type-opt ${newRoomType === "public" ? "sel" : ""}`}>
+                    <input type="radio" name="mtype" checked={newRoomType === "public"} onChange={() => setNewRoomType("public")} /> Public
+                  </label>
+                  <label className={`type-opt ${newRoomType === "private" ? "sel" : ""}`}>
+                    <input type="radio" name="mtype" checked={newRoomType === "private"} onChange={() => setNewRoomType("private")} /> Private 🔒
+                  </label>
+                </div>
+                {newRoomType === "private" && (
+                  <input type="password" value={newRoomPass} onChange={e => setNewRoomPass(e.target.value)} placeholder="Password room" required />
+                )}
+                <button type="submit" className="btn-sm">Buat Room</button>
+              </form>
+            )}
+            <div className="mobile-room-list">
+              {rooms.map(r => (
+                <div key={r.id}
+                  className={`mobile-room-item ${activeRoom?.id === r.id ? "active" : ""} ${r.isLobby ? "room-lobby" : ""}`}
+                  onClick={() => { openRoom(r); setMobileTab("chat"); }}>
+                  <span>{r.isLobby ? "🏠" : "#"}{r.name.slice(1)}</span>
+                  {(r.type === "private" || r.isLocked) && <span className="room-lock-icon">🔒</span>}
+                  {unread[r.id] > 0 && <span className="unread-badge">{unread[r.id]}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mobileTab === "members" && (
+          <div className="mobile-tab-content">
+            <div className="mobile-tab-title">👥 Anggota</div>
+            <div className="member-list">
+              <div className="member-group">
+                <div className="member-group-label">💚 Online ({onlineUsers.filter(u => u.onlineNow).length})</div>
+                {onlineUsers.filter(u => u.onlineNow).map(u => (
+                  <div key={u.id} className="member-item" onClick={() => fetchProfile(u.id)}>
+                    <div className="member-avatar" style={{ background: nickColor(u.id) }}>
+                      {u.avatarUrl ? <img src={resolveUrl(u.avatarUrl)} alt="" className="member-avatar-img" /> : <span>{(u.displayName || u.username)[0].toUpperCase()}</span>}
+                      <span className="member-dot online" />
+                    </div>
+                    <div className="member-name">{u.displayName || u.username}</div>
+                    {activeRoom && (activeRoom.type === "private" || activeRoom.isLocked) && !members.find(m => m.userId === u.id) && (
+                      <button className="btn-invite-sm" onClick={(e) => { e.stopPropagation(); sendInvite(u.username); }}>Undang</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="member-group">
+                <div className="member-group-label">🏠 Room ({members.length})</div>
+                {members.map(m => (
+                  <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)}>
+                    <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
+                      {m.avatarUrl ? <img src={resolveUrl(m.avatarUrl)} alt="" className="member-avatar-img" /> : <span>{(m.displayName || m.username || "?")[0].toUpperCase()}</span>}
+                      <span className={`member-dot ${presenceMap.get(m.userId)?.status === "online" ? "online" : ""}`} />
+                    </div>
+                    <div className="member-name">{m.displayName || m.username}</div>
+                    {m.role !== "member" && <span className="member-role">{m.role}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mobileTab === "dm" && (
+          <div className="mobile-tab-content">
+            <div className="mobile-tab-title">💌 Pesan Pribadi</div>
+            <div className="dm-list">
+              {rooms.filter(r => r.type === "dm").map(r => (
+                <div key={r.id} className="dm-item" onClick={() => { setActiveRoom(r); setMobileTab("chat"); }}>
+                  <div className="dm-avatar">💬</div>
+                  <div className="dm-name">{resolveDmName(r)}</div>
+                  {unread[r.id] > 0 && <span className="unread-badge">{unread[r.id]}</span>}
+                </div>
+              ))}
+              {rooms.filter(r => r.type === "dm").length === 0 && (
+                <div className="dm-empty">
+                  <div className="empty-icon">💌</div>
+                  <div>Belum ada pesan pribadi</div>
+                  <div className="empty-sub">Buka profil user di tab Anggota → klik 💬 Pesan</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Chat utama (tab chat + semua tab lain hidden) */}
+        {mobileTab === "chat" && (
+          <main className="mobile-chat">
+            <div className="messages">
+              {activeRoom?.isLobby && (
+                <div className="lobby-welcome">
+                  <div className="lobby-icon">🏠</div>
+                  <h2>Selamat datang di {activeRoom.name.replace("#","")}!</h2>
+                  <p>Ngobrol seru, dapet temen baru ❤️</p>
+                  <div className="lobby-guide">
+                    <div className="guide-item"><span>1️⃣</span><div><b>Room</b> — tab 🏠 bawah buat join/buat channel</div></div>
+                    <div className="guide-item"><span>2️⃣</span><div><b>Anggota</b> — tab 👥 buat liat & kenalan user</div></div>
+                    <div className="guide-item"><span>3️⃣</span><div><b>DM</b> — tab 💌 buat ngobrol pribadi</div></div>
+                    <div className="guide-item"><span>4️⃣</span><div><b>Command</b> — ketik <code>/help</code> (join, nick, me, topic)</div></div>
+                  </div>
+                  <div className="lobby-tip">💡 Kirim pesan pertama buat nyapa semua!</div>
+                </div>
+              )}
+              {messages.filter(m => !ignoreList.includes(m.authorId)).map(msg => {
+                if (msg.kind === "system") return <div key={msg.id} className="msg msg-system"><span className="msg-system-text">{msg.content}</span></div>;
+                const isMine = msg.authorId === user?.id;
+                const rendered = msg.content.split(/(@[a-zA-Z0-9_]{2,20})/g).map((p: string, i: number) => p.startsWith("@") && p.length > 2 ? <span key={i} className="mention">{p}</span> : <span key={i}>{p}</span>);
+                return (
+                  <div key={msg.id} className={`msg ${isMine ? "msg-mine" : "msg-theirs"}`}>
+                    <span className="msg-time">{fmtTime(msg.createdAt)}</span>
+                    <span className="msg-nick" style={{ color: nickColor(msg.authorId) }}>{msg.authorName || shortId(msg.authorId)}</span>
+                    <span className="msg-body">{rendered}</span>
+                  </div>
+                );
+              })}
+              <div ref={messagesEnd} />
+            </div>
+            {(typingUsers[activeRoom?.id || ""] || []).length > 0 && (
+              <div className="typing-indicator">✍️ {typingUsers[activeRoom?.id || ""].join(", ")} sedang mengetik…</div>
+            )}
+            <form className="input-bar" onSubmit={handleSend}>
+              <div className="input-wrap">
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => { handleInputChange(e.target.value); notifyTyping(); }}
+                  placeholder="Ketik pesan…"
+                  autoFocus
+                />
+              </div>
+              <button type="submit" className="btn-send" disabled={!input.trim()}>▸</button>
+            </form>
+          </main>
+        )}
+
+        {/* Bottom nav 4 tab */}
+        <nav className="mobile-nav">
+          <button className={`mobile-nav-item ${mobileTab === "chat" ? "active" : ""}`} onClick={() => setMobileTab("chat")}>
+            <span className="mn-icon">💬</span><span className="mn-label">Chat</span>
+          </button>
+          <button className={`mobile-nav-item ${mobileTab === "rooms" ? "active" : ""}`} onClick={() => setMobileTab("rooms")}>
+            <span className="mn-icon">🏠</span><span className="mn-label">Room</span>
+          </button>
+          <button className={`mobile-nav-item ${mobileTab === "members" ? "active" : ""}`} onClick={() => setMobileTab("members")}>
+            <span className="mn-icon">👥</span><span className="mn-label">Anggota</span>
+          </button>
+          <button className={`mobile-nav-item ${mobileTab === "dm" ? "active" : ""}`} onClick={() => setMobileTab("dm")}>
+            <span className="mn-icon">💌</span><span className="mn-label">DM</span>
+            {unreadCount > 0 && <span className="mn-badge">{unreadCount}</span>}
+          </button>
+        </nav>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -726,7 +962,7 @@ export default function App() {
         <div className="main-header">
           <div className="main-header-left">
             <span className="header-hash">#</span>
-            <span className={`header-room ${activeRoom?.isLobby ? "header-lobby" : ""}`}>{activeRoom?.name?.slice(1) || "pilih ruangan"}</span>
+            <span className={`header-room ${activeRoom?.isLobby ? "header-lobby" : ""}`}>{headerName}</span>
             {activeRoom?.isLobby && <span className="lobby-badge">🏠 LOBY</span>}
             {activeRoom?.topic && <span className="header-topic">{activeRoom.topic}</span>}
             {activeRoom?.isLocked && <span className="lock-badge">🔒</span>}
@@ -1081,7 +1317,7 @@ export default function App() {
             {rooms.filter(r => r.type === "dm").map(r => (
               <div key={r.id} className="dm-item" onClick={() => { setActiveRoom(r); setMobileTab("chat"); }}>
                 <div className="dm-avatar">💬</div>
-                <div className="dm-name">{r.name.replace("#dm-", "").slice(0, 20)}</div>
+                <div className="dm-name">{resolveDmName(r)}</div>
                 {unread[r.id] > 0 && <span className="mn-badge">{unread[r.id]}</span>}
               </div>
             ))}

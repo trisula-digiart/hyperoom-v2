@@ -218,6 +218,18 @@ export async function getRoomPasswordHash(roomId: string): Promise<string | null
   return r.rows[0]?.password_hash ?? null;
 }
 
+export async function getDmPartner(roomId: string, myUserId: string): Promise<{ id: string; username: string; displayName: string | null } | null> {
+  const r = await pools.core.query(
+    `SELECT u.id, u.username, u.display_name
+     FROM public.room_members m
+     JOIN public.users u ON u.id = m.user_id
+     WHERE m.room_id = $1 AND m.user_id != $2
+     LIMIT 1`,
+    [roomId, myUserId]
+  );
+  return r.rows[0] || null;
+}
+
 // ---------- INVITES (core) ----------
 
 export async function createInvite(roomId: string, userId: string, invitedBy: string): Promise<void> {
