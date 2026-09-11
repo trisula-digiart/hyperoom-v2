@@ -963,7 +963,14 @@ export default function App() {
                     <div className="profile-row"><span>Status</span><span>{profileUser.status || "—"}</span></div>
                     <div className="profile-row"><span>Gabung</span><span>{fmtTime(profileUser.createdAt)}</span></div>
                     {profileUser.rooms && profileUser.rooms.length > 0 && (
-                      <div className="profile-row"><span>Room</span><span>{profileUser.rooms.map((r: any) => `#${r.name.slice(1)} (${r.role})`).join(", ")}</span></div>
+                      <div className="profile-row">
+                        <span>Room</span>
+                        <span className="profile-rooms">
+                          {profileUser.rooms.map((r: any) => (
+                            <span key={r.name} className="profile-room-tag">#{r.name.slice(1)} ({r.role})</span>
+                          ))}
+                        </span>
+                      </div>
                     )}
                   </div>
                   <div className="profile-actions">
