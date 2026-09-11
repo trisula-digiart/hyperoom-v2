@@ -155,6 +155,13 @@ app.post("/api/rooms/:id/join", requireAuth, async (req, res) => {
     const role = await getMemberRole(room.id, req2.userId);
     if (!role) return res.status(403).json({ error: "ruangan terkunci, undangan diperlukan" });
   }
+  // Idempotent: kalau sudah member, jangan tulis system message lagi (refresh-safe)
+  const existing = await getMemberRole(room.id, req2.userId);
+  if (existing) {
+    const member = { roomId: room.id, userId: req2.userId, role: existing, joinedAt: new Date().toISOString() };
+    res.json({ room, member, alreadyMember: true });
+    return;
+  }
   const member = await joinRoom(room.id, req2.userId);
   // real join event: system message (mIRC style) + broadcast
   const user = await findUserById(req2.userId);
@@ -233,7 +240,7 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
   let role = await getMemberRole(req.params.id, req2.userId);
   if (!role) {
-    // Auto-join public room when posting (real membership, like viewing)
+    // Auto-join public room when posting (real membership) — idempotent
     if (room.type === "public" && !room.isLocked) {
       await joinRoom(req.params.id, req2.userId);
       role = "member";
@@ -247,8 +254,10 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
     }
   }
   const message = await insertMessage(req.params.id, req2.userId, content.trim(), kind || "text", replyToMessageId);
-  realtime.broadcastToRoom(message.roomId, { type: "message:new", message });
-  res.status(201).json({ message });
+  const author = await findUserById(req2.userId);
+  const msgWithName = { ...message, authorName: author?.display_name || author?.username || message.authorId.slice(0, 8) };
+  realtime.broadcastToRoom(message.roomId, { type: "message:new", message: msgWithName });
+  res.status(201).json({ message: msgWithName });
 });
 
 app.patch("/api/messages/:id", requireAuth, async (req, res) => {
