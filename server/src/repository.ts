@@ -1,4 +1,5 @@
 import type { Message, Presence, Profile, Room, RoomMember, RoomRole } from "@hyperoom/domain";
+import path from "node:path";
 import { pools } from "./db.js";
 
 export interface DbUser {
@@ -355,7 +356,7 @@ export async function listReactions(messageId: string): Promise<{ emoji: string;
   return r.rows.map((x) => ({ emoji: x.emoji, userId: x.user_id }));
 }
 
-async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {
+async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null; avatarUrl: string | null })[]> {
   const r = await pools.core.query(
     `SELECT m.room_id, m.user_id, m.role, m.joined_at, u.username, u.display_name
      FROM public.room_members m
@@ -363,6 +364,9 @@ async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { 
      WHERE m.room_id = $1 ORDER BY m.joined_at`,
     [roomId]
   );
+  // resolve avatars per user (dari storage DB)
+  const avatars = await pools.storage.query(`SELECT user_id, storage_path FROM public.avatars`);
+  const avatarMap = new Map(avatars.rows.map((a: any) => [a.user_id, a.storage_path]));
   return r.rows.map((x) => ({
     roomId: x.room_id,
     userId: x.user_id,
@@ -370,6 +374,7 @@ async function listRoomMembersDetailed(roomId: string): Promise<(RoomMember & { 
     joinedAt: x.joined_at,
     username: x.username,
     displayName: x.display_name,
+    avatarUrl: avatarMap.get(x.user_id) ? `/avatars/${path.basename(avatarMap.get(x.user_id))}` : null,
   }));
 }
 

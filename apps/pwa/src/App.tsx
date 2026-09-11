@@ -6,7 +6,7 @@ import "./App.css";
 // --- Types ---
 interface Profile { id: string; username: string; displayName?: string; createdAt: string }
 interface Room { id: string; name: string; type: string; topic?: string; isLocked: boolean; ownerId: string; createdAt: string; isLobby?: boolean }
-interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null }
+interface Member { roomId: string; userId: string; role: string; joinedAt: string; username?: string; displayName?: string | null; avatarUrl?: string | null }
 interface Message { id: string; roomId: string; authorId: string; kind: string; content: string; createdAt: string; replyToMessageId?: string | null; authorName?: string }
 interface Presence { userId: string; status: string }
 
@@ -804,7 +804,7 @@ export default function App() {
                 {onlineUsers.filter(u => u.onlineNow).map(u => (
                   <div key={u.id} className="member-item" onClick={() => fetchProfile(u.id)}>
                     <div className="member-avatar" style={{ background: nickColor(u.id) }}>
-                      <span>{(u.displayName || u.username)[0].toUpperCase()}</span>
+                      {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="member-avatar-img" /> : <span>{(u.displayName || u.username)[0].toUpperCase()}</span>}
                       <span className="member-dot online" />
                     </div>
                     <div className="member-name" style={{ color: nickColor(u.id) }}>
@@ -843,7 +843,7 @@ export default function App() {
                         return (
                           <div key={m.userId} className="member-item" onClick={() => fetchProfile(m.userId)} style={{position: "relative"}}>
                             <div className="member-avatar" style={{ background: nickColor(m.userId) }}>
-                              <span>{nick[0].toUpperCase()}</span>
+                              {m.avatarUrl ? <img src={m.avatarUrl} alt="" className="member-avatar-img" /> : <span>{nick[0].toUpperCase()}</span>}
                               <span className={`member-dot ${isOnline ? "online" : ""}`} />
                             </div>
                             <div className="member-name" style={{ color: nickColor(m.userId) }}>

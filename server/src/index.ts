@@ -309,6 +309,8 @@ app.get("/api/users/online", requireAuth, async (req, res) => {
     if (!membershipByUser.has(m.user_id)) membershipByUser.set(m.user_id, []);
     membershipByUser.get(m.user_id)!.push({ name: roomNameById.get(m.room_id) || "?", role: m.role });
   }
+  const avatars = await pools.storage.query(`SELECT user_id, storage_path FROM public.avatars`);
+  const avatarMap = new Map(avatars.rows.map((a: any) => [a.user_id, a.storage_path]));
   res.json({
     users: users.rows.map((u) => ({
       id: u.id,
@@ -316,6 +318,7 @@ app.get("/api/users/online", requireAuth, async (req, res) => {
       displayName: u.display_name,
       platformRole: u.platform_role,
       onlineNow: u.online_now,
+      avatarUrl: avatarMap.get(u.id) ? `/avatars/${path.basename(avatarMap.get(u.id))}` : null,
       rooms: membershipByUser.get(u.id) || [],
     })),
   });
@@ -540,7 +543,7 @@ app.get("/api/rooms/:id/messages", requireAuth, async (req, res) => {
     return {
       ...m,
       authorName: nameMap.get(m.authorId) || m.authorId.slice(0, 8),
-      mentions: mentionMatch.map(x => x.slice(1)).filter((v, i, a) => a.indexOf(v) === i),
+      mentions: mentionMatch.map((x: string) => x.slice(1)).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i),
     };
   });
   res.json({ messages: enriched });
@@ -576,7 +579,7 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   const author = await findUserById(req2.userId);
   // detect mentions @username di content (real)
   const mentionMatch = content.match(/@([a-zA-Z0-9_]{2,20})/g) || [];
-  const mentions = mentionMatch.map(m => m.slice(1)).filter((v, i, a) => a.indexOf(v) === i);
+  const mentions = mentionMatch.map((m: string) => m.slice(1)).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
   const msgWithName = { ...message, authorName: author?.display_name || author?.username || message.authorId.slice(0, 8), mentions };
   realtime.broadcastToRoom(message.roomId, { type: "message:new", message: msgWithName });
   res.status(201).json({ message: msgWithName });
