@@ -218,8 +218,23 @@ app.post("/api/rooms/:id/messages", requireAuth, async (req, res) => {
   const req2 = req as express.Request & { userId: string };
   const { content, kind, replyToMessageId } = req.body || {};
   if (!content || !content.trim()) return res.status(400).json({ error: "content required" });
-  const role = await getMemberRole(req.params.id, req2.userId);
-  if (!role) return res.status(403).json({ error: "not a member of this room" });
+  const room = await findRoomById(req.params.id);
+  if (!room) return res.status(404).json({ error: "ruangan tidak ditemukan" });
+  let role = await getMemberRole(req.params.id, req2.userId);
+  if (!role) {
+    // Auto-join public room when posting (real membership, like viewing)
+    if (room.type === "public" && !room.isLocked) {
+      await joinRoom(req.params.id, req2.userId);
+      role = "member";
+      const user = await findUserById(req2.userId);
+      const nick = user?.display_name || user?.username || "seseorang";
+      const sysMsg = await insertMessage(req.params.id, req2.userId, `*** ${nick} gabung ke ${room.name}`, "system");
+      realtime.broadcastToRoom(req.params.id, { type: "room:join", roomId: req.params.id, member: { roomId: req.params.id, userId: req2.userId, role: "member", joinedAt: new Date().toISOString() } });
+      realtime.broadcastToRoom(req.params.id, { type: "message:new", message: sysMsg });
+    } else {
+      return res.status(403).json({ error: "not a member of this room" });
+    }
+  }
   const message = await insertMessage(req.params.id, req2.userId, content.trim(), kind || "text", replyToMessageId);
   realtime.broadcastToRoom(message.roomId, { type: "message:new", message });
   res.status(201).json({ message });

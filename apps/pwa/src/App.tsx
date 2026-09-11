@@ -160,9 +160,11 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user]);
 
-  // fetch messages + members when room changes
+  // fetch messages + members when room changes (auto-join public)
   useEffect(() => {
     if (!activeRoom) return;
+    // Ensure membership (public rooms auto-join)
+    api("POST", `/api/rooms/${activeRoom.id}/join`).catch(() => {});
     api<{ messages: Message[] }>("GET", `/api/rooms/${activeRoom.id}/messages`).then(r => setMessages(r.messages)).catch(() => setMessages([]));
     api<{ members: Member[] }>("GET", `/api/rooms/${activeRoom.id}/members`).then(r => setMembers(r.members)).catch(() => setMembers([]));
     inputRef.current?.focus();
