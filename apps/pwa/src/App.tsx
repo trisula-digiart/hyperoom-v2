@@ -166,6 +166,8 @@ export default function App() {
   const [unread, setUnread] = useState<Record<string, number>>({});
   const activeRoomRef = useRef<string | null>(null);
   useEffect(() => { activeRoomRef.current = activeRoom?.id || null; }, [activeRoom]);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
   const messagesEnd = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -218,16 +220,49 @@ export default function App() {
     return () => clearInterval(iv);
   }, [user, activeRoom]);
 
+  // real browser notification (mention/PM/room lain) + sound
+  const notifyReal = (msg: any) => {
+    const myName = userRef.current?.username || "";
+    const isMention = msg.content?.includes(`@${myName}`) || msg.content?.includes(`@${userRef.current?.displayName}`);
+    const isDm = msg.roomId !== activeRoomRef.current && (msg.roomId || "").includes("dm-");
+    const isOtherRoom = msg.roomId !== activeRoomRef.current;
+    if (!isMention && !isDm && !isOtherRoom) return;
+    if (msg.authorId === userRef.current?.id) return; // pesan sendiri ga notif
+
+    // sound (Web Audio API — beep singkat)
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880; gain.gain.value = 0.15;
+      osc.start(); osc.stop(ctx.currentTime + 0.15);
+    } catch {}
+
+    // browser notification
+    try {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "default") Notification.requestPermission();
+      if (Notification.permission !== "granted") return;
+      const tag = isMention ? "mention" : isDm ? "dm" : "room";
+      new Notification(`💬 ${msg.authorName || msg.authorId.slice(0, 6)}`, {
+        body: isMention ? `Mention lo: ${msg.content}` : isDm ? `DM: ${msg.content}` : msg.content,
+        tag,
+      });
+    } catch {}
+  };
+
   // handle ws events
   const handleWsEvent = useCallback((evt: WsEvent) => {
     switch (evt.type) {
       case "message:new":
         setMessages(prev => [...prev, evt.message]);
-        // unread badge kalau room bukan aktif
         setUnread(prev => {
           if (evt.message.roomId === activeRoomRef.current) return prev;
           return { ...prev, [evt.message.roomId]: (prev[evt.message.roomId] || 0) + 1 };
         });
+        // real browser notification: mention / DM / pesan room lain
+        notifyReal(evt.message);
         break;
       case "message:edit":
         setMessages(prev => prev.map(m => m.id === evt.message.id ? { ...m, content: evt.message.content } : m));
@@ -579,7 +614,7 @@ export default function App() {
         </div>
 
         <div className="messages">
-          {messages.length === 0 && activeRoom?.isLobby && (
+          {activeRoom?.isLobby && (
             <div className="lobby-welcome">
               <div className="lobby-icon">🏠</div>
               <h2>Selamat datang di {activeRoom.name.replace("#","")}!</h2>
@@ -590,9 +625,9 @@ export default function App() {
                   <div className="guide-item"><span>1️⃣</span><div><b>Gabung room</b> — klik room di kiri. Room <b>🔒 privat</b> minta password / harus diundang owner</div></div>
                   <div className="guide-item"><span>2️⃣</span><div><b>Buat room sendiri</b> — klik <b>＋</b> di samping SALURAN → isi nama, pilih Public/Private (private = password)</div></div>
                   <div className="guide-item"><span>3️⃣</span><div><b>Undang teman</b> — buka room privat kamu → klik <b>✉️ Undang</b> → pilih user online → teman langsung bisa masuk tanpa password</div></div>
-                  <div className="guide-item"><span>4️⃣</span><div><b>Command /chat</b> — ketik <code>/help</code> liat semua: <code>/join</code> <code>/nick</code> <code>/me</code> <code>/topic</code> <code>/whois</code> <code>/ignore</code></div></div>
-                  <div className="guide-item"><span>5️⃣</span><div><b>Profil & avatar</b> — klik user di daftar ANGGOTA → lihat profil. Foto avatar bisa di-upload dari galeri HP/PC</div></div>
-                  <div className="guide-item"><span>6️⃣</span><div><b>Pesan sendiri</b> — muncul di kanan dengan bubble biru, pesan orang lain di kiri</div></div>
+                  <div className="guide-item"><span>4️⃣</span><div><b>Command /chat</b> — ketik <code>/help</code> liat semua: <code>/join</code> <code>/nick</code> <code>/me</code> <code>/topic</code> <code>/whois</code> <code>/ignore</code> <code>/msg</code></div></div>
+                  <div className="guide-item"><span>5️⃣</span><div><b>Profil & avatar</b> — klik user di daftar ANGGOTA → lihat profil, kirim DM, foto avatar dari galeri HP/PC</div></div>
+                  <div className="guide-item"><span>6️⃣</span><div><b>Reaksi & notif</b> — 👍❤️😂 di pesan, badge unread di saluran, notifikasi browser kalau di-mention/PM</div></div>
                 </div>
               </div>
               <div className="lobby-tip">💡 Kirim pesan pertama di sini buat nyapa semua orang!</div>
